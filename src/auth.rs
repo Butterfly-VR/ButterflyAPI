@@ -8,7 +8,6 @@ use tracing::trace;
 
 pub async fn check_auth(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
     trace!("authing for {:#?}", req.uri());
-    trace!("{:#?}", req.headers());
     // requires the http crate to get the header name
     if req
         .headers()

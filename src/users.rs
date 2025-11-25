@@ -1,7 +1,8 @@
 use crate::AppState;
 use crate::auth;
 use crate::models::*;
-use crate::schema::temp_test_users::dsl::*;
+use crate::schema::users::dsl::*;
+use crate::users;
 use argon2::PasswordHash;
 use axum::extract::Path;
 use axum::extract::State;
@@ -19,10 +20,11 @@ use tokio::time::Instant;
 use tokio::time::sleep;
 use tracing::trace;
 use tracing::warn;
+use uuid::Uuid;
 
-const ROUTE_ORIGIN: &'static str = "/api/v0";
-const USERS_ROUTE: &'static str = constcat::concat!(ROUTE_ORIGIN, "/users");
-const USER_ID_ROUTE: &'static str = constcat::concat!(USERS_ROUTE, "/{usr_id}");
+const ROUTE_ORIGIN: &str = "/api/v0";
+const USERS_ROUTE: &str = constcat::concat!(ROUTE_ORIGIN, "/users");
+const USER_ID_ROUTE: &str = constcat::concat!(USERS_ROUTE, "/{usr_id}");
 
 #[derive(Deserialize)]
 struct SignUp {
@@ -63,9 +65,12 @@ struct SearchResult {
     pub results: Vec<PublicUser>,
 }
 
-async fn get_user(State(state): State<Arc<AppState>>, Path(usr_id): Path<i32>) -> Json<PublicUser> {
+async fn get_user(
+    State(state): State<Arc<AppState>>,
+    Path(usr_id): Path<Uuid>,
+) -> Json<PublicUser> {
     let mut db_connection = state.pool.get().unwrap();
-    if let Ok(usr) = temp_test_users
+    if let Ok(usr) = users
         .filter(id.eq(usr_id))
         .select(User::as_select())
         .get_result(&mut db_connection)
@@ -85,16 +90,16 @@ async fn find_user(
     Json(json): Json<Search>,
 ) -> Json<SearchResult> {
     let mut db_connection = state.pool.get().unwrap();
-    let users = temp_test_users
+    let users_list = users
         .select(PublicUser::as_select())
         .filter(username.like("%".to_owned() + &json.search_term + "%"))
         .load(&mut db_connection)
         .unwrap();
-    trace!("got {:#?}", users);
-    return Json(SearchResult {
-        result_count: users.len() as i64,
-        results: users,
-    });
+    trace!("got {:#?}", users_list);
+    Json(SearchResult {
+        result_count: users_list.len() as i64,
+        results: users_list,
+    })
 }
 
 async fn sign_up(
@@ -102,7 +107,7 @@ async fn sign_up(
     Json(json): Json<SignUp>,
 ) -> Json<SignUpResult> {
     let mut db_connection = state.pool.get().unwrap();
-    if temp_test_users
+    if users
         .count()
         .filter(username.eq(&json.username))
         .or_filter(email.eq(&json.email))
@@ -130,22 +135,22 @@ async fn sign_up(
         email: &json.email,
     };
 
-    insert_into(temp_test_users)
+    insert_into(users)
         .values(new_user)
         .execute(&mut db_connection)
         .unwrap();
 
-    return Json(SignUpResult {
+    Json(SignUpResult {
         was_created: true,
         error_message: String::new(),
-    });
+    })
 }
 async fn sign_in(
     State(state): State<Arc<AppState>>,
     Json(json): Json<SignIn>,
 ) -> Json<SignInResult> {
     let mut db_connection = state.pool.get().unwrap();
-    if let Ok(user) = temp_test_users
+    if let Ok(user) = users
         .select(User::as_select())
         .filter(email.eq(&json.email))
         .get_result(&mut db_connection)
