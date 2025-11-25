@@ -1,8 +1,10 @@
+use std::time::SystemTime;
+
 use diesel::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::schema::users;
+use crate::schema::{tokens, users};
 
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = users)]
@@ -13,6 +15,9 @@ pub struct User {
     pub password: Vec<u8>,
     pub salt: Vec<u8>,
     pub email: String,
+    pub verified_email: bool,
+    pub homeworld: Option<Uuid>,
+    pub avatar: Option<Uuid>,
 }
 #[derive(Insertable)]
 #[diesel(table_name = users)]
@@ -29,4 +34,15 @@ pub struct NewUser<'a> {
 pub struct PublicUser {
     pub id: Uuid,
     pub username: String,
+    pub homeworld: Option<Uuid>,
+    pub avatar: Option<Uuid>,
+}
+
+#[derive(Queryable, Selectable, Insertable)]
+#[diesel(table_name = tokens)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct Token {
+    pub user: Uuid,
+    pub token: Vec<u8>,
+    pub expiry: Option<SystemTime>,
 }

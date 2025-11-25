@@ -1,22 +1,47 @@
+use crate::AppState;
 use axum::{
     body::Body,
-    http::{HeaderValue, Request, StatusCode},
+    extract::State,
+    http::{Request, StatusCode},
     middleware::Next,
     response::Response,
 };
-use tracing::trace;
+use diesel::prelude::*;
+use schema::tokens::dsl::*;
+use std::sync::Arc;
+use tokio::task::yield_now;
+use uuid::Uuid;
 
-pub async fn check_auth(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
-    trace!("authing for {:#?}", req.uri());
-    // requires the http crate to get the header name
-    if req
+use crate::schema;
+
+pub async fn check_auth(
+    State(state): State<Arc<AppState>>,
+    mut req: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let mut conn;
+    // poor man's .get_async().await
+    loop {
+        if let Some(c) = state.pool.try_get() {
+            conn = c;
+            break;
+        }
+        yield_now();
+    }
+    let header_token = req
         .headers()
         .get("token")
-        .unwrap_or(&HeaderValue::from_static(""))
-        != "[1-2-3-4-5-6-7-8-1-2-3-4-5-6-7-8-1-2-3-4-5-6-7-8-1-2-3-4-5-6-7-8]"
+        .map(|x| x.as_bytes())
+        .unwrap_or_default();
+    if let Some(user_id) = tokens
+        .select(user)
+        .filter(token.eq(header_token))
+        .load::<Uuid>(&mut conn)
+        .optional()
+        .ok()
     {
-        return Err(StatusCode::UNAUTHORIZED);
+        req.extensions_mut().insert(user_id);
+        return Ok(next.run(req).await);
     }
-
-    Ok(next.run(req).await)
+    Err(StatusCode::UNAUTHORIZED)
 }
