@@ -2,15 +2,10 @@ use crate::ApiResponse;
 use crate::AppState;
 use crate::ErrorCode;
 use crate::ErrorInfo;
-use crate::HASHER_ALGORITHM;
-use crate::HASHER_PARAMETERS;
-use crate::HASHER_VERSION;
-use crate::ROUTE_ORIGIN;
 use crate::auth;
-use crate::get_conn_async;
+use crate::hash::hash_password;
 use crate::models::*;
 use crate::schema::users::dsl::*;
-use argon2::Argon2;
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http;
@@ -19,13 +14,13 @@ use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::insert_into;
 use diesel::prelude::*;
-use password_hash::rand_core;
-use password_hash::rand_core::RngCore;
+use diesel_async::RunQueryDsl;
+use rand_core::TryRngCore;
 use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
-const USERS_ROUTE: &str = constcat::concat!(ROUTE_ORIGIN, "/user");
+const USERS_ROUTE: &str = "/user";
 const USER_ID_ROUTE: &str = constcat::concat!(USERS_ROUTE, "/{usr_id}");
 
 #[derive(Deserialize)]
@@ -36,16 +31,21 @@ struct SignUpRequest {
 }
 
 pub async fn sign_up(
-    State(state): State<Arc<AppState>>,
+    state: State<Arc<AppState>>,
     Json(json): Json<SignUpRequest>,
 ) -> ApiResponse<()> {
-    let mut db_connection = get_conn_async(&state.pool).await;
+    let conn = state.pool.get().await;
+    if conn.is_err() {
+        return ApiResponse::BadNoInfo(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    let mut conn = conn.unwrap();
 
     if users
         .count()
         .filter(username.eq(&json.username))
         .or_filter(email.eq(&json.email))
-        .get_result(&mut db_connection)
+        .get_result(&mut conn)
+        .await
         .unwrap_or(1)
         != 0
     {
@@ -63,56 +63,50 @@ pub async fn sign_up(
         return ApiResponse::BadNoInfo(StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    let mut block = None;
-    for lock in state.hasher_memory.iter() {
-        if let Ok(b) = lock.try_lock() {
-            block = Some(b);
-            break;
-        }
-    }
-
-    if block.is_none() {
-        return ApiResponse::BadNoInfo(StatusCode::SERVICE_UNAVAILABLE);
-    }
-    let block = block.unwrap();
-
-    let mut password_hash = [0; 64];
-
-    Argon2::new(
-        HASHER_ALGORITHM,
-        HASHER_VERSION,
-        HASHER_PARAMETERS.clone().unwrap(),
+    if let Some(password_hash) = hash_password(
+        state.clone(),
+        json.password_hash.try_into().unwrap(),
+        password_salt.clone(),
     )
-    .hash_password_into_with_memory(
-        &json.password_hash,
-        &password_salt,
-        &mut password_hash,
-        **block,
-    );
-
-    let new_user: NewUser = NewUser {
-        username: &json.username,
-        password: &password_hash,
-        salt: &password_salt,
-        email: &json.email,
-    };
-    insert_into(users)
-        .values(new_user)
-        .execute(&mut db_connection)
-        .unwrap();
-
-    ApiResponse::Good(http::StatusCode::OK, Json(()))
+    .await
+    .ok()
+    {
+        let new_user: NewUser = NewUser {
+            username: &json.username,
+            password: &password_hash,
+            salt: &password_salt,
+            email: &json.email,
+        };
+        if insert_into(users)
+            .values(new_user)
+            .execute(&mut conn)
+            .await
+            .is_ok()
+        {
+            return ApiResponse::Good(http::StatusCode::OK, Json(()));
+        }
+    } else {
+        // most likely cause is that we didnt have a block available
+        return ApiResponse::BadNoInfo(http::StatusCode::SERVICE_UNAVAILABLE);
+    }
+    return ApiResponse::BadNoInfo(http::StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 pub async fn get_user(
     State(state): State<Arc<AppState>>,
     Path(usr_id): Path<Uuid>,
 ) -> ApiResponse<PublicUser> {
-    let mut conn = get_conn_async(&state.pool).await;
+    let conn = state.pool.get().await;
+    if conn.is_err() {
+        return ApiResponse::BadNoInfo(StatusCode::SERVICE_UNAVAILABLE);
+    }
+    let mut conn = conn.unwrap();
+
     if let Ok(Some(user)) = users
         .select(PublicUser::as_select())
         .filter(id.eq(usr_id))
         .first(&mut conn)
+        .await
         .optional()
     {
         return ApiResponse::Good(StatusCode::OK, Json(user));
@@ -124,7 +118,7 @@ pub fn users_router(app_state: Arc<AppState>) -> Router {
     Router::new()
         .route(USERS_ROUTE, post(sign_up))
         .route(USER_ID_ROUTE, get(get_user))
-        .layer(middleware::from_fn_with_state(
+        .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth::check_auth,
         ))

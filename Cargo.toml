@@ -6,12 +6,13 @@ edition = "2024"
 [dependencies]
 argon2 = "0.5.3"
 axum = {version = "0.8.4", features = ["macros"]}
+bb8 = "0.9.1"
 constcat = "0.6.1"
-diesel = {version = "2.2.12", features = ["postgres", "r2d2", "uuid"] }
-diesel-async = { version = "0.7.0", features = ["postgres", "r2d2", "pool"] }
+diesel = {version = "2.2.12", features = ["postgres", "uuid"] }
+diesel-async = { version = "0.7.0", features = ["postgres", "bb8", "pool"] }
 dotenvy = "0.15.7"
 hex = "0.4.3"
-password-hash = {version = "0.5.0", features = ["std"]}
+rand_core = "0.9.3"
 serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
 tower = "0.5.2"

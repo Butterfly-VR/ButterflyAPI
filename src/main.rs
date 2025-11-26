@@ -1,8 +1,9 @@
 use axum::Json;
 use axum::response::IntoResponse;
 use axum::{Router, http, middleware, routing::get};
-use diesel::PgConnection;
-use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
+use bb8::Pool;
+use diesel_async::AsyncPgConnection;
+use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use dotenvy::dotenv;
 
 use serde::Serialize;
@@ -11,9 +12,9 @@ use std::net::IpAddr;
 use std::time::SystemTime;
 use std::{env, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
-use tokio::task::yield_now;
 use tower_http::trace::TraceLayer;
 mod auth;
+mod hash;
 pub mod models;
 mod rate_limit;
 pub mod schema;
@@ -74,21 +75,9 @@ struct ErrorInfo {
 }
 
 struct AppState {
-    pool: Pool<ConnectionManager<PgConnection>>,
+    pool: Pool<AsyncDieselConnectionManager<AsyncPgConnection>>,
     hasher_memory: [Mutex<Box<[argon2::Block; HASHER_MEMORY as usize]>>; HASHER_MEMORY_BLOCKS],
     request_history: RwLock<HashMap<IpAddr, Mutex<VecDeque<SystemTime>>>>,
-}
-
-async fn get_conn_async(
-    pool: &Pool<ConnectionManager<PgConnection>>,
-) -> PooledConnection<ConnectionManager<PgConnection>> {
-    // poor man's .get_async().await
-    loop {
-        if let Some(c) = pool.try_get() {
-            return c;
-        }
-        yield_now();
-    }
 }
 
 #[tokio::main]
@@ -104,7 +93,8 @@ async fn main() {
     let app_state: Arc<AppState> = Arc::new(AppState {
         pool: Pool::builder()
             .test_on_check_out(true)
-            .build(ConnectionManager::new(database_url))
+            .build(AsyncDieselConnectionManager::new(database_url))
+            .await
             .expect("failed to connect to the database"),
         hasher_memory: std::array::from_fn(|_| {
             Mutex::new(
@@ -119,8 +109,8 @@ async fn main() {
 
     let app = Router::new()
         .route(ROUTE_ORIGIN, get(|| async { http::StatusCode::OK }))
-        .merge(users::users_router(app_state.clone()))
-        .merge(tokens::tokens_router(app_state.clone()))
+        .nest(ROUTE_ORIGIN, users::users_router(app_state.clone()))
+        .nest(ROUTE_ORIGIN, tokens::tokens_router(app_state.clone()))
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),

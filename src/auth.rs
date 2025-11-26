@@ -1,4 +1,4 @@
-use crate::{AppState, get_conn_async};
+use crate::AppState;
 use axum::{
     body::Body,
     extract::State,
@@ -7,6 +7,7 @@ use axum::{
     response::Response,
 };
 use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use schema::tokens::dsl::*;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -14,11 +15,15 @@ use uuid::Uuid;
 use crate::schema;
 
 pub async fn check_auth(
-    State(state): State<Arc<AppState>>,
+    state: State<Arc<AppState>>,
     mut req: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let mut conn = get_conn_async(&state.pool).await;
+    let conn = state.pool.get().await;
+    if conn.is_err() {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    let mut conn = conn.unwrap();
     let header_token = req
         .headers()
         .get("token")
@@ -28,6 +33,7 @@ pub async fn check_auth(
         .select(user)
         .filter(token.eq(header_token))
         .first::<Uuid>(&mut conn)
+        .await
         .optional()
         .ok()
     {
