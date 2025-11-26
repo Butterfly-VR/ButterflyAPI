@@ -76,10 +76,10 @@ pub async fn rate_limit_basic(
     next: Next,
 ) -> Result<Response, StatusCode> {
     // some abritary initial limits
-    // 5 req per sec for a minute, half that for an hour, eighth that for a day
-    const MINUTE_RATE_LIMIT: usize = 300;
+    // 2 req per sec for a minute, half that for an hour, quater that for a day
+    const MINUTE_RATE_LIMIT: usize = 120;
     const HOUR_RATE_LIMIT: usize = MINUTE_RATE_LIMIT * 30;
-    const DAY_RATE_LIMIT: usize = HOUR_RATE_LIMIT * 6;
+    const DAY_RATE_LIMIT: usize = HOUR_RATE_LIMIT * 12;
     check_limit_inner(
         State(state),
         req,

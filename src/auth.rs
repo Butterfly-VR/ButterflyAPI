@@ -1,4 +1,4 @@
-use crate::AppState;
+use crate::{AppState, get_conn_async};
 use axum::{
     body::Body,
     extract::State,
@@ -9,7 +9,6 @@ use axum::{
 use diesel::prelude::*;
 use schema::tokens::dsl::*;
 use std::sync::Arc;
-use tokio::task::yield_now;
 use uuid::Uuid;
 
 use crate::schema;
@@ -19,24 +18,16 @@ pub async fn check_auth(
     mut req: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let mut conn;
-    // poor man's .get_async().await
-    loop {
-        if let Some(c) = state.pool.try_get() {
-            conn = c;
-            break;
-        }
-        yield_now();
-    }
+    let mut conn = get_conn_async(&state.pool).await;
     let header_token = req
         .headers()
         .get("token")
         .map(|x| x.as_bytes())
         .unwrap_or_default();
-    if let Some(user_id) = tokens
+    if let Some(Some(user_id)) = tokens
         .select(user)
         .filter(token.eq(header_token))
-        .load::<Uuid>(&mut conn)
+        .first::<Uuid>(&mut conn)
         .optional()
         .ok()
     {

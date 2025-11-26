@@ -9,6 +9,7 @@ use crate::schema::{tokens, users};
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(treat_none_as_default_value = false)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
@@ -31,6 +32,7 @@ pub struct NewUser<'a> {
 #[derive(Serialize, Queryable, Selectable, Debug)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(treat_none_as_default_value = false)]
 pub struct PublicUser {
     pub id: Uuid,
     pub username: String,
@@ -41,6 +43,7 @@ pub struct PublicUser {
 #[derive(Queryable, Selectable, Insertable)]
 #[diesel(table_name = tokens)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(treat_none_as_default_value = false)]
 pub struct Token {
     pub user: Uuid,
     pub token: Vec<u8>,

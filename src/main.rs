@@ -1,7 +1,8 @@
 use axum::Json;
+use axum::response::IntoResponse;
 use axum::{Router, http, middleware, routing::get};
 use diesel::PgConnection;
-use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use dotenvy::dotenv;
 
 use serde::Serialize;
@@ -10,11 +11,13 @@ use std::net::IpAddr;
 use std::time::SystemTime;
 use std::{env, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
+use tokio::task::yield_now;
 use tower_http::trace::TraceLayer;
 mod auth;
 pub mod models;
 mod rate_limit;
 pub mod schema;
+mod tokens;
 mod users;
 use std::net::SocketAddr;
 
@@ -33,12 +36,35 @@ const HASHER_MEMORY: u32 = 64_000; // 64MB
 const HASHER_ITERATIONS: u32 = 10;
 const HASHER_OUTPUT_LEN: u32 = 64;
 
-#[derive(Serialize)]
-enum ErrorCode {}
+const HASHER_ALGORITHM: argon2::Algorithm = argon2::Algorithm::Argon2id;
+const HASHER_VERSION: argon2::Version = argon2::Version::V0x13;
+// todo: unwrap this here when const unwrap gets stabalized
+static HASHER_PARAMETERS: Result<argon2::Params, argon2::Error> = argon2::Params::new(
+    HASHER_MEMORY,
+    HASHER_ITERATIONS,
+    1,
+    Some(HASHER_OUTPUT_LEN as usize),
+);
 
-enum ApiResponse<T> {
+#[derive(Serialize)]
+enum ErrorCode {
+    UserExists,
+}
+
+enum ApiResponse<T: Serialize> {
     Good(http::StatusCode, Json<T>),
     Bad(http::StatusCode, Json<ErrorInfo>),
+    BadNoInfo(http::StatusCode),
+}
+
+impl<T: Serialize> IntoResponse for ApiResponse<T> {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            Self::Bad(code, error) => (code, error).into_response(),
+            Self::Good(code, result) => (code, result).into_response(),
+            Self::BadNoInfo(code) => code.into_response(),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -51,6 +77,18 @@ struct AppState {
     pool: Pool<ConnectionManager<PgConnection>>,
     hasher_memory: [Mutex<Box<[argon2::Block; HASHER_MEMORY as usize]>>; HASHER_MEMORY_BLOCKS],
     request_history: RwLock<HashMap<IpAddr, Mutex<VecDeque<SystemTime>>>>,
+}
+
+async fn get_conn_async(
+    pool: &Pool<ConnectionManager<PgConnection>>,
+) -> PooledConnection<ConnectionManager<PgConnection>> {
+    // poor man's .get_async().await
+    loop {
+        if let Some(c) = pool.try_get() {
+            return c;
+        }
+        yield_now();
+    }
 }
 
 #[tokio::main]
@@ -82,9 +120,10 @@ async fn main() {
     let app = Router::new()
         .route(ROUTE_ORIGIN, get(|| async { http::StatusCode::OK }))
         .merge(users::users_router(app_state.clone()))
+        .merge(tokens::tokens_router(app_state.clone()))
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn_with_state(
-            app_state,
+            app_state.clone(),
             rate_limit::rate_limit_basic,
         ));
 
