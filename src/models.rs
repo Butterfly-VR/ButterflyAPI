@@ -6,16 +6,15 @@ use uuid::Uuid;
 
 use crate::schema::{tokens, users};
 
-#[derive(diesel_derive_enum::DbEnum)]
-#[db_enum(existing_type_path = "crate::schema::sql_types::PermisionLevel")]
-enum PermisionLevel {
+// diesel dosent like enums so we dont define these on db
+pub enum PermissionLevel {
     None = 0,
     Creator = 1,
     Moderator = 2,
     Admin = 3,
 }
 
-enum ObjectType {
+pub enum ObjectType {
     World = 0,
     Avatar = 1,
 }
@@ -31,7 +30,7 @@ pub struct User {
     pub salt: Vec<u8>,
     pub email: String,
     pub verified_email: bool,
-    pub permisions: PermissionLevel,
+    pub permisions: i16, // PermisionLevel
     pub trust: i32,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,

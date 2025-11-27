@@ -1,23 +1,10 @@
--- Your SQL goes here
-CREATE TYPE "permision_level" AS ENUM (
-	'none',
-	'creator',
-	'moderator',
-	'admin'
-);
-
-CREATE TYPE "object_type" AS ENUM (
-	'world',
-	'avatar'
-);
-
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(20) NOT NULL,
 	"email" TEXT NOT NULL,
 	"password" BYTEA NOT NULL,
 	"salt" BYTEA NOT NULL,
-	"permisions" PERMISION_LEVEL NOT NULL,
+	"permisions" SMALLINT NOT NULL,
 	"trust" INTEGER NOT NULL,
 	"verified_email" BOOLEAN NOT NULL,
 	"homeworld" UUID,
@@ -31,6 +18,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 CREATE TABLE IF NOT EXISTS "tokens" (
 	"user" UUID NOT NULL,
 	"token" BYTEA NOT NULL,
+	"renewable" BOOLEAN NOT NULL,
 	"expiry" TIMESTAMP,
 	PRIMARY KEY("user", "token")
 );
@@ -52,6 +40,7 @@ CREATE TABLE IF NOT EXISTS "objects" (
 	"object_id" UUID NOT NULL,
 	"image_id" UUID NOT NULL,
 	"creator" UUID NOT NULL,
+	"type" SMALLINT NOT NULL,
 	PRIMARY KEY("id")
 );
 

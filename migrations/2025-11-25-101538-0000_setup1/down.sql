@@ -20,8 +20,3 @@ DROP TABLE IF EXISTS "tags";
 DROP TABLE IF EXISTS "objects";
 DROP TABLE IF EXISTS "tokens";
 DROP TABLE IF EXISTS "users";
-
-
--- Drop ENUM types
-DROP TYPE IF EXISTS "object_type";
-DROP TYPE IF EXISTS "permision_level";

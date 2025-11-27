@@ -2,14 +2,6 @@
 
 pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "object_type"))]
-    pub struct ObjectType;
-
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "permision_level"))]
-    pub struct PermisionLevel;
-
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "varbit", schema = "pg_catalog"))]
     pub struct Varbit;
 }
@@ -17,7 +9,6 @@ pub mod sql_types {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Varbit;
-    use super::sql_types::ObjectType;
 
     objects (id) {
         id -> Uuid,
@@ -35,7 +26,7 @@ diesel::table! {
         image_id -> Uuid,
         creator -> Uuid,
         #[sql_name = "type"]
-        type_ -> ObjectType,
+        type_ -> Int2,
     }
 }
 
@@ -51,15 +42,12 @@ diesel::table! {
     tokens (user, token) {
         user -> Uuid,
         token -> Bytea,
-        expiry -> Nullable<Timestamp>,
         renewable -> Bool,
+        expiry -> Nullable<Timestamp>,
     }
 }
 
 diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::PermisionLevel;
-
     users (id) {
         id -> Uuid,
         #[max_length = 20]
@@ -67,7 +55,7 @@ diesel::table! {
         email -> Text,
         password -> Bytea,
         salt -> Bytea,
-        permisions -> PermisionLevel,
+        permisions -> Int2,
         trust -> Int4,
         verified_email -> Bool,
         homeworld -> Nullable<Uuid>,

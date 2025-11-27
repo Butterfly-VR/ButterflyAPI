@@ -49,6 +49,8 @@ impl<'a> From<NewUser<'a>> for User {
             salt: value.salt.to_owned(),
             email: value.email.to_owned(),
             verified_email: false,
+            permisions: crate::models::PermissionLevel::None as i16,
+            trust: 0,
             homeworld: None,
             avatar: None,
         }
