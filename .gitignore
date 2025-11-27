@@ -16,6 +16,8 @@ Cargo.lock
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
+# diesel config
+diesel.toml
 
 # Added by cargo
 

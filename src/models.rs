@@ -6,7 +6,21 @@ use uuid::Uuid;
 
 use crate::schema::{tokens, users};
 
-#[derive(Queryable, Selectable)]
+#[derive(diesel_derive_enum::DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::PermisionLevel")]
+enum PermisionLevel {
+    None = 0,
+    Creator = 1,
+    Moderator = 2,
+    Admin = 3,
+}
+
+enum ObjectType {
+    World = 0,
+    Avatar = 1,
+}
+
+#[derive(Queryable, Selectable, Insertable)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 #[diesel(treat_none_as_default_value = false)]
@@ -17,17 +31,10 @@ pub struct User {
     pub salt: Vec<u8>,
     pub email: String,
     pub verified_email: bool,
+    pub permisions: PermissionLevel,
+    pub trust: i32,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
-}
-#[derive(Insertable)]
-#[diesel(table_name = users)]
-#[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct NewUser<'a> {
-    pub username: &'a str,
-    pub password: &'a [u8],
-    pub salt: &'a [u8],
-    pub email: &'a str,
 }
 #[derive(Serialize, Queryable, Selectable, Debug)]
 #[diesel(table_name = users)]
@@ -48,4 +55,5 @@ pub struct Token {
     pub user: Uuid,
     pub token: Vec<u8>,
     pub expiry: Option<SystemTime>,
+    pub renewable: bool,
 }

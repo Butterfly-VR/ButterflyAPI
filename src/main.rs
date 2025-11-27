@@ -1,3 +1,4 @@
+use crate::hash::HASHER_MEMORY;
 use axum::Json;
 use axum::response::IntoResponse;
 use axum::{Router, http, middleware, routing::get};
@@ -5,7 +6,6 @@ use bb8::Pool;
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use dotenvy::dotenv;
-
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 use std::net::IpAddr;
@@ -31,25 +31,10 @@ const ROUTE_ORIGIN: &str = "/api/v0";
 // this doubles as a limit on the number of parallel login requests
 const HASHER_MEMORY_BLOCKS: usize = 5;
 
-// password hasher parameters
-// changing this could stop all users from logging in
-const HASHER_MEMORY: u32 = 64_000; // 64MB
-const HASHER_ITERATIONS: u32 = 10;
-const HASHER_OUTPUT_LEN: u32 = 64;
-
-const HASHER_ALGORITHM: argon2::Algorithm = argon2::Algorithm::Argon2id;
-const HASHER_VERSION: argon2::Version = argon2::Version::V0x13;
-// todo: unwrap this here when const unwrap gets stabalized
-static HASHER_PARAMETERS: Result<argon2::Params, argon2::Error> = argon2::Params::new(
-    HASHER_MEMORY,
-    HASHER_ITERATIONS,
-    1,
-    Some(HASHER_OUTPUT_LEN as usize),
-);
-
 #[derive(Serialize)]
 enum ErrorCode {
     UserExists,
+    UserDosentExist,
 }
 
 enum ApiResponse<T: Serialize> {
@@ -76,7 +61,7 @@ struct ErrorInfo {
 
 struct AppState {
     pool: Pool<AsyncDieselConnectionManager<AsyncPgConnection>>,
-    hasher_memory: [Mutex<Box<[argon2::Block; HASHER_MEMORY as usize]>>; HASHER_MEMORY_BLOCKS],
+    hasher_memory: [Mutex<Vec<argon2::Block>>; HASHER_MEMORY_BLOCKS],
     request_history: RwLock<HashMap<IpAddr, Mutex<VecDeque<SystemTime>>>>,
 }
 
@@ -97,12 +82,7 @@ async fn main() {
             .await
             .expect("failed to connect to the database"),
         hasher_memory: std::array::from_fn(|_| {
-            Mutex::new(
-                vec![argon2::Block::new(); HASHER_MEMORY as usize]
-                    .into_boxed_slice()
-                    .try_into()
-                    .unwrap(),
-            )
+            Mutex::new(vec![argon2::Block::new(); HASHER_MEMORY as usize])
         }),
         request_history: RwLock::new(HashMap::with_capacity(256)),
     });

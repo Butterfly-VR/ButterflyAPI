@@ -2,6 +2,10 @@
 
 pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "object_type"))]
+    pub struct ObjectType;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "permision_level"))]
     pub struct PermisionLevel;
 
@@ -13,6 +17,7 @@ pub mod sql_types {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Varbit;
+    use super::sql_types::ObjectType;
 
     objects (id) {
         id -> Uuid,
@@ -29,6 +34,8 @@ diesel::table! {
         object_id -> Uuid,
         image_id -> Uuid,
         creator -> Uuid,
+        #[sql_name = "type"]
+        type_ -> ObjectType,
     }
 }
 
@@ -45,6 +52,7 @@ diesel::table! {
         user -> Uuid,
         token -> Bytea,
         expiry -> Nullable<Timestamp>,
+        renewable -> Bool,
     }
 }
 

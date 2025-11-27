@@ -10,6 +10,7 @@ use axum::{
 use std::{collections::VecDeque, net::SocketAddr, time::SystemTime};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
+use tracing::trace;
 
 async fn check_limit_inner(
     State(state): State<Arc<AppState>>,
@@ -77,6 +78,7 @@ pub async fn rate_limit_basic(
 ) -> Result<Response, StatusCode> {
     // some abritary initial limits
     // 2 req per sec for a minute, half that for an hour, quater that for a day
+    trace!("hit rate limit later");
     const MINUTE_RATE_LIMIT: usize = 120;
     const HOUR_RATE_LIMIT: usize = MINUTE_RATE_LIMIT * 30;
     const DAY_RATE_LIMIT: usize = HOUR_RATE_LIMIT * 12;
