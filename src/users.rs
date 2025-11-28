@@ -83,8 +83,8 @@ pub async fn sign_up(
         return ApiResponse::Bad(
             http::StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
-                code: ErrorCode::UserExists,
-                message: Some(String::from("Username or email already in use.")),
+                error_code: ErrorCode::UserExists,
+                error_message: Some(String::from("Username or email already in use.")),
             }),
         );
     }
@@ -145,6 +145,7 @@ pub async fn get_user(
         .await
         .optional()
     {
+        // todo: return full user when token is from that user
         return ApiResponse::Good(StatusCode::OK, Json(user));
     }
     trace!("request for non existant user uuid");

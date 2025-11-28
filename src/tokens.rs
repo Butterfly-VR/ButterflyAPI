@@ -2,7 +2,6 @@ use crate::ApiResponse;
 use crate::AppState;
 use crate::ErrorCode;
 use crate::ErrorInfo;
-use crate::ROUTE_ORIGIN;
 use crate::auth::check_auth;
 use crate::hash::hash_password;
 use crate::models::*;
@@ -28,9 +27,9 @@ use tracing::warn;
 use uuid::Uuid;
 
 const NEW_TOKEN_EXPIRY: Duration = Duration::from_hours(24 * 30);
-const TOKEN_ROUTE: &str = constcat::concat!(ROUTE_ORIGIN, "/token");
-const TOKEN_VALIDATE_ROUTE: &str = constcat::concat!(ROUTE_ORIGIN, "/token/validate");
-const TOKEN_USER_ROUTE: &str = constcat::concat!(ROUTE_ORIGIN, "/token/user");
+const TOKEN_ROUTE: &str = "/token";
+const TOKEN_VALIDATE_ROUTE: &str = constcat::concat!(TOKEN_ROUTE, "/validate");
+const TOKEN_USER_ROUTE: &str = constcat::concat!(TOKEN_ROUTE, "/user");
 
 #[derive(Deserialize)]
 pub struct SignInRequest {
@@ -42,7 +41,7 @@ pub struct SignInRequest {
 #[derive(Serialize)]
 pub struct SignInResponse {
     token: Vec<u8>,
-    token_expiry: Option<SystemTime>,
+    token_expiry: Option<u64>,
     renewable: bool,
 }
 
@@ -50,7 +49,10 @@ impl From<Token> for SignInResponse {
     fn from(value: Token) -> Self {
         Self {
             token: value.token,
-            token_expiry: value.expiry,
+            token_expiry: value
+                .expiry
+                .and_then(|x| x.duration_since(SystemTime::now()).ok())
+                .map(|x| x.as_secs()),
             renewable: value.renewable,
         }
     }
@@ -64,7 +66,7 @@ pub async fn sign_in(
     // an attacker could use the difference in response time to find valid emails.
     // to avoid this we wait a specified time
     // that should be longer than the time spent hashing to hide the difference
-    const TIMING_ATTACK_PROTECTION: Duration = Duration::from_secs(0);
+    const TIMING_ATTACK_PROTECTION: Duration = Duration::from_secs(1);
 
     let t1 = Instant::now();
     let conn = state.pool.get().await;
@@ -116,35 +118,25 @@ pub async fn sign_in(
         }
         let elapsed = Instant::now().duration_since(t1);
         trace!(
-            "used {:?} out of {:?} seconds hashing",
-            elapsed.as_secs(),
-            TIMING_ATTACK_PROTECTION.as_secs()
+            "used {:?} out of {:?} hashing",
+            elapsed, TIMING_ATTACK_PROTECTION
         );
         if elapsed > TIMING_ATTACK_PROTECTION {
             warn!(
-                "took too long to hash password (debug build? overloaded?), timing information may be exposed. took {:?} seconds",
+                "took too long to hash password (debug build? overloaded?), timing information may be exposed. took {:?}",
                 elapsed
             );
         }
-        sleep(TIMING_ATTACK_PROTECTION.saturating_sub(elapsed)).await;
-        return ApiResponse::Bad(
-            StatusCode::BAD_REQUEST,
-            Json(ErrorInfo {
-                code: ErrorCode::UserDosentExist,
-                message: Some(String::from("Invalid email or password.")),
-            }),
-        );
-    } else {
-        let elapsed = Instant::now().duration_since(t1);
-        sleep(TIMING_ATTACK_PROTECTION - elapsed).await;
-        return ApiResponse::Bad(
-            StatusCode::BAD_REQUEST,
-            Json(ErrorInfo {
-                code: ErrorCode::UserDosentExist,
-                message: Some(String::from("Invalid email or password.")),
-            }),
-        );
     }
+    let elapsed = Instant::now().duration_since(t1);
+    sleep(TIMING_ATTACK_PROTECTION.saturating_sub(elapsed)).await;
+    return ApiResponse::Bad(
+        StatusCode::BAD_REQUEST,
+        Json(ErrorInfo {
+            error_code: ErrorCode::UserDosentExist,
+            error_message: Some(String::from("Invalid email or password.")),
+        }),
+    );
 }
 
 pub async fn renew(
@@ -206,8 +198,8 @@ pub async fn get_user(
         return ApiResponse::Bad(
             StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
-                code: ErrorCode::UserDosentExist,
-                message: None,
+                error_code: ErrorCode::UserDosentExist,
+                error_message: None,
             }),
         );
     }

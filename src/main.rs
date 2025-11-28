@@ -29,7 +29,9 @@ const ROUTE_ORIGIN: &str = "/api/v0";
 // we allocate several 'blocks' upfront guarded by mutexs
 // and lock one to use whenever we need to hash
 // this doubles as a limit on the number of parallel login requests
-const HASHER_MEMORY_BLOCKS: usize = 5;
+// there isnt much point in having this more than the number of
+// hardware threads, since it wastes memory and can cause timing issues
+const HASHER_MEMORY_BLOCKS: usize = 1;
 
 #[derive(Serialize)]
 enum ErrorCode {
@@ -55,8 +57,8 @@ impl<T: Serialize> IntoResponse for ApiResponse<T> {
 
 #[derive(Serialize)]
 struct ErrorInfo {
-    code: ErrorCode,
-    message: Option<String>,
+    error_code: ErrorCode,
+    error_message: Option<String>,
 }
 
 struct AppState {

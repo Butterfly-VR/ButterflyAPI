@@ -10,7 +10,7 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use schema::tokens::dsl::*;
 use std::sync::Arc;
-use tracing::{trace, warn};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::schema;
@@ -20,7 +20,6 @@ pub async fn check_auth(
     mut req: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    trace!("reached auth layer");
     let conn = state.pool.get().await;
     if conn.is_err() {
         warn!("failed to aquire db connection");
