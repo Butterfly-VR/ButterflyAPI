@@ -51,7 +51,7 @@ impl From<Token> for SignInResponse {
             token: value.token,
             token_expiry: value
                 .expiry
-                .and_then(|x| x.duration_since(SystemTime::now()).ok())
+                .and_then(|x| x.duration_since(SystemTime::UNIX_EPOCH).ok())
                 .map(|x| x.as_secs()),
             renewable: value.renewable,
         }
