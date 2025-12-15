@@ -1,4 +1,4 @@
-use crate::ApiResponse;
+use crate::ApiError;
 use crate::AppState;
 use crate::ErrorCode;
 use crate::ErrorInfo;
@@ -19,8 +19,6 @@ use rand_core::TryRngCore;
 use serde::Deserialize;
 use std::sync::Arc;
 use tracing::info;
-use tracing::trace;
-use tracing::warn;
 use uuid::Uuid;
 
 const USERS_ROUTE: &str = "/user";
@@ -60,42 +58,29 @@ impl<'a> From<NewUser<'a>> for User {
 pub async fn sign_up(
     state: State<Arc<AppState>>,
     Json(json): Json<SignUpRequest>,
-) -> ApiResponse<()> {
-    trace!("handler start");
-    let conn = state.pool.get().await;
-    if conn.is_err() {
-        warn!("failed to aquire db connection");
-        return ApiResponse::BadNoInfo(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-    let mut conn = conn.unwrap();
+) -> Result<(), ApiError> {
+    let mut conn = state.pool.get().await?;
 
-    trace!("count request");
     if users
         .count()
         .filter(username.eq(&json.username))
         .or_filter(email.eq(&json.email))
-        .get_result(&mut conn)
-        .await
-        .unwrap_or(1)
+        .get_result::<i64>(&mut conn)
+        .await?
         != 0
     {
-        trace!("got bad request: duplicate user");
-        return ApiResponse::Bad(
+        return Err(ApiError::WithResponse(
             http::StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
-                error_code: ErrorCode::UserExists,
+                error_code: ErrorCode::UserAlreadyExists,
                 error_message: Some(String::from("Username or email already in use.")),
             }),
-        );
+        ));
     }
 
     let mut password_salt = [0; 64];
-    if rand_core::OsRng.try_fill_bytes(&mut password_salt).is_err() {
-        warn!("failed to get rng bytes from OsRng");
-        return ApiResponse::BadNoInfo(StatusCode::SERVICE_UNAVAILABLE);
-    }
+    rand_core::OsRng.try_fill_bytes(&mut password_salt)?;
 
-    trace!("hash start");
     if let Some(password_hash) = hash_password(
         state.clone(),
         json.password_hash.try_into().unwrap_or([0; 64]),
@@ -110,33 +95,23 @@ pub async fn sign_up(
             salt: &password_salt,
             email: &json.email,
         };
-        let result = insert_into(users)
+        insert_into(users)
             .values::<User>(new_user.into())
             .execute(&mut conn)
-            .await;
-        if result.is_ok() {
-            return ApiResponse::Good(http::StatusCode::OK, Json(()));
-        } else {
-            trace!("failed to insert new user: {:?}", result.unwrap_err());
-            return ApiResponse::BadNoInfo(StatusCode::INTERNAL_SERVER_ERROR);
-        }
+            .await?;
+        return Ok(());
     } else {
         // most likely cause is that we didnt have a block available
-        info!("failed to hash password, probably because no available memory blocks");
-        return ApiResponse::BadNoInfo(http::StatusCode::SERVICE_UNAVAILABLE);
+        info!("failed to hash password, probably because we had no available memory blocks");
+        return Err(ApiError::WithCode(http::StatusCode::SERVICE_UNAVAILABLE));
     }
 }
 
 pub async fn get_user(
     State(state): State<Arc<AppState>>,
     Path(usr_id): Path<Uuid>,
-) -> ApiResponse<PublicUser> {
-    let conn = state.pool.get().await;
-    if conn.is_err() {
-        warn!("failed to aquire db connection");
-        return ApiResponse::BadNoInfo(StatusCode::SERVICE_UNAVAILABLE);
-    }
-    let mut conn = conn.unwrap();
+) -> Result<Json<PublicUser>, ApiError> {
+    let mut conn = state.pool.get().await?;
 
     if let Ok(Some(user)) = users
         .select(PublicUser::as_select())
@@ -146,10 +121,9 @@ pub async fn get_user(
         .optional()
     {
         // todo: return full user when token is from that user
-        return ApiResponse::Good(StatusCode::OK, Json(user));
+        return Ok(Json(user));
     }
-    trace!("request for non existant user uuid");
-    ApiResponse::BadNoInfo(StatusCode::NOT_FOUND)
+    Err(ApiError::WithCode(StatusCode::NOT_FOUND))
 }
 
 pub fn users_router(app_state: Arc<AppState>) -> Router {

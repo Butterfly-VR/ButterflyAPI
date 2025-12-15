@@ -1,5 +1,6 @@
 use crate::hash::HASHER_MEMORY;
 use axum::Json;
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Router, http, middleware, routing::get};
 use bb8::Pool;
@@ -8,6 +9,7 @@ use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use dotenvy::dotenv;
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
+use std::error::Error;
 use std::net::IpAddr;
 use std::time::SystemTime;
 use std::{env, sync::Arc};
@@ -35,22 +37,26 @@ const HASHER_MEMORY_BLOCKS: usize = 1;
 
 #[derive(Serialize)]
 enum ErrorCode {
-    UserExists,
+    UserAlreadyExists,
     UserDosentExist,
 }
 
-enum ApiResponse<T: Serialize> {
-    Good(http::StatusCode, Json<T>),
-    Bad(http::StatusCode, Json<ErrorInfo>),
-    BadNoInfo(http::StatusCode),
+enum ApiError {
+    WithResponse(http::StatusCode, Json<ErrorInfo>),
+    WithCode(http::StatusCode),
 }
 
-impl<T: Serialize> IntoResponse for ApiResponse<T> {
+impl<T: Error> From<T> for ApiError {
+    fn from(_: T) -> Self {
+        Self::WithCode(StatusCode::INTERNAL_SERVER_ERROR)
+    }
+}
+
+impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         match self {
-            Self::Bad(code, error) => (code, error).into_response(),
-            Self::Good(code, result) => (code, result).into_response(),
-            Self::BadNoInfo(code) => code.into_response(),
+            Self::WithResponse(code, error) => (code, error).into_response(),
+            Self::WithCode(code) => code.into_response(),
         }
     }
 }

@@ -10,7 +10,7 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use schema::tokens::dsl::*;
 use std::sync::Arc;
-use tracing::{trace, warn};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::schema;
@@ -25,7 +25,6 @@ pub async fn check_auth(
         warn!("failed to aquire db connection");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    trace!("token: {:?}", req.headers().get("token"));
     let mut conn = conn.unwrap();
     let header_token = req
         .headers()

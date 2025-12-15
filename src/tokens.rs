@@ -1,4 +1,4 @@
-use crate::ApiResponse;
+use crate::ApiError;
 use crate::AppState;
 use crate::ErrorCode;
 use crate::ErrorInfo;
@@ -61,20 +61,15 @@ impl From<Token> for SignInResponse {
 pub async fn sign_in(
     state: State<Arc<AppState>>,
     Json(json): Json<SignInRequest>,
-) -> ApiResponse<SignInResponse> {
+) -> Result<Json<SignInResponse>, ApiError> {
     // since we reject incorrect emails before hashing the password
     // an attacker could use the difference in response time to find valid emails.
     // to avoid this we wait a specified time
     // that should be longer than the time spent hashing to hide the difference
-    const TIMING_ATTACK_PROTECTION: Duration = Duration::from_secs(1);
+    const TIMING_ATTACK_PROTECTION: Duration = Duration::from_secs(0);
 
     let t1 = Instant::now();
-    let conn = state.pool.get().await;
-    if conn.is_err() {
-        warn!("failed to aquire db connection");
-        return ApiResponse::BadNoInfo(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-    let mut conn = conn.unwrap();
+    let mut conn = state.pool.get().await?;
 
     if let Ok(u) = users
         .select(User::as_select())
@@ -92,10 +87,7 @@ pub async fn sign_in(
         if password_hash.unwrap_or_default() == u.password {
             let mut t = vec![0; 64];
 
-            if rand_core::OsRng.try_fill_bytes(&mut t).is_err() {
-                warn!("failed to get rng bytes from OsRng");
-                return ApiResponse::BadNoInfo(StatusCode::SERVICE_UNAVAILABLE);
-            }
+            rand_core::OsRng.try_fill_bytes(&mut t)?;
 
             let token_value: Token = Token {
                 user: u.id,
@@ -104,17 +96,12 @@ pub async fn sign_in(
                 renewable: json.allow_renew,
             };
 
-            if insert_into(tokens)
+            insert_into(tokens)
                 .values(&token_value)
                 .execute(&mut conn)
-                .await
-                .is_err()
-            {
-                trace!("failed to insert new token");
-                return ApiResponse::BadNoInfo(StatusCode::INTERNAL_SERVER_ERROR);
-            }
+                .await?;
 
-            return ApiResponse::Good(StatusCode::OK, Json(token_value.into()));
+            return Ok(Json(token_value.into()));
         }
         let elapsed = Instant::now().duration_since(t1);
         trace!(
@@ -130,31 +117,23 @@ pub async fn sign_in(
     }
     let elapsed = Instant::now().duration_since(t1);
     sleep(TIMING_ATTACK_PROTECTION.saturating_sub(elapsed)).await;
-    return ApiResponse::Bad(
+    return Err(ApiError::WithResponse(
         StatusCode::BAD_REQUEST,
         Json(ErrorInfo {
             error_code: ErrorCode::UserDosentExist,
             error_message: Some(String::from("Invalid email or password.")),
         }),
-    );
+    ));
 }
 
 pub async fn renew(
     State(state): State<Arc<AppState>>,
     user_id: Extension<Uuid>,
-) -> ApiResponse<SignInResponse> {
-    let conn = state.pool.get().await;
-    if conn.is_err() {
-        warn!("failed to aquire db connection");
-        return ApiResponse::BadNoInfo(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-    let mut conn = conn.unwrap();
+) -> Result<Json<SignInResponse>, ApiError> {
+    let mut conn = state.pool.get().await?;
 
     let mut t = vec![0; 64];
-    if rand_core::OsRng.try_fill_bytes(&mut t).is_err() {
-        warn!("failed to get rng bytes from OsRng");
-        return ApiResponse::BadNoInfo(StatusCode::SERVICE_UNAVAILABLE);
-    }
+    rand_core::OsRng.try_fill_bytes(&mut t)?;
 
     let token_value: Token = Token {
         user: user_id.0,
@@ -166,10 +145,9 @@ pub async fn renew(
     insert_into(tokens)
         .values(&token_value)
         .execute(&mut conn)
-        .await
-        .unwrap();
+        .await?;
 
-    return ApiResponse::Good(StatusCode::OK, Json(token_value.into()));
+    return Ok(Json(token_value.into()));
 }
 
 pub async fn verify() -> StatusCode {
@@ -179,13 +157,8 @@ pub async fn verify() -> StatusCode {
 pub async fn get_user(
     State(state): State<Arc<AppState>>,
     user_id: Extension<Uuid>,
-) -> ApiResponse<PublicUser> {
-    let conn = state.pool.get().await;
-    if conn.is_err() {
-        warn!("failed to aquire db connection");
-        return ApiResponse::BadNoInfo(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-    let mut conn = conn.unwrap();
+) -> Result<Json<PublicUser>, ApiError> {
+    let mut conn = state.pool.get().await?;
 
     if let Ok(u) = users
         .select(PublicUser::as_select())
@@ -193,15 +166,15 @@ pub async fn get_user(
         .get_result(&mut conn)
         .await
     {
-        return ApiResponse::Good(StatusCode::OK, Json(u));
+        return Ok(Json(u));
     } else {
-        return ApiResponse::Bad(
+        return Err(ApiError::WithResponse(
             StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
                 error_code: ErrorCode::UserDosentExist,
                 error_message: None,
             }),
-        );
+        ));
     }
 }
 
