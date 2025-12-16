@@ -68,7 +68,10 @@ struct ErrorInfo {
 }
 
 struct AppState {
+    // todo: optimise some connections to readonly
+    //readonly_pool: Pool<AsyncDieselConnectionManager<AsyncPgConnection>>,
     pool: Pool<AsyncDieselConnectionManager<AsyncPgConnection>>,
+    s3_client: aws_sdk_s3::Client,
     hasher_memory: [Mutex<Vec<argon2::Block>>; HASHER_MEMORY_BLOCKS],
     request_history: RwLock<HashMap<IpAddr, Mutex<VecDeque<SystemTime>>>>,
 }
@@ -89,6 +92,7 @@ async fn main() {
             .build(AsyncDieselConnectionManager::new(database_url))
             .await
             .expect("failed to connect to the database"),
+        s3_client: aws_sdk_s3::Client::new(&aws_config::load_from_env().await),
         hasher_memory: std::array::from_fn(|_| {
             Mutex::new(vec![argon2::Block::new(); HASHER_MEMORY as usize])
         }),
