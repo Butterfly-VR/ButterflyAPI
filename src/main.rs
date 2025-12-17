@@ -18,6 +18,7 @@ use tower_http::trace::TraceLayer;
 mod auth;
 mod hash;
 pub mod models;
+mod objects;
 mod rate_limit;
 pub mod schema;
 mod tokens;
@@ -103,6 +104,7 @@ async fn main() {
         .route(ROUTE_ORIGIN, get(|| async { http::StatusCode::OK }))
         .nest(ROUTE_ORIGIN, users::users_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, tokens::tokens_router(app_state.clone()))
+        .nest(ROUTE_ORIGIN, objects::objects_router(app_state.clone()))
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
