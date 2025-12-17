@@ -31,16 +31,14 @@ CREATE TABLE IF NOT EXISTS "objects" (
 	"id" UUID NOT NULL UNIQUE,
 	"name" VARCHAR(20) NOT NULL,
 	"description" VARCHAR(512) NOT NULL,
-	"flags" VARBIT NOT NULL,
+	"flags" BOOLEAN[] NOT NULL,
 	"updated_at" TIMESTAMP NOT NULL DEFAULT now(),
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
 	"verified" BOOLEAN NOT NULL,
 	"object_size" INTEGER NOT NULL,
 	"image_size" INTEGER NOT NULL,
-	"object_id" UUID NOT NULL,
-	"image_id" UUID NOT NULL,
 	"creator" UUID NOT NULL,
-	"type" SMALLINT NOT NULL,
+	"object_type" SMALLINT NOT NULL,
 	PRIMARY KEY("id")
 );
 

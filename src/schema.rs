@@ -1,32 +1,20 @@
 // @generated automatically by Diesel CLI.
 
-pub mod sql_types {
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "varbit", schema = "pg_catalog"))]
-    pub struct Varbit;
-}
-
 diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::Varbit;
-
     objects (id) {
         id -> Uuid,
         #[max_length = 20]
         name -> Varchar,
         #[max_length = 512]
         description -> Varchar,
-        flags -> Varbit,
+        flags -> Array<Nullable<Bool>>,
         updated_at -> Timestamp,
         created_at -> Timestamp,
         verified -> Bool,
         object_size -> Int4,
         image_size -> Int4,
-        object_id -> Uuid,
-        image_id -> Uuid,
         creator -> Uuid,
-        #[sql_name = "type"]
-        type_ -> Int2,
+        object_type -> Int2,
     }
 }
 
