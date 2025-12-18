@@ -9,10 +9,12 @@ aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1.118.0"
 axum = {version = "0.8.4", features = ["macros"]}
 bb8 = "0.9.1"
+bytes = "1.11.0"
 constcat = "0.6.1"
 diesel = {version = "2.2.12", features = ["postgres", "uuid"] }
 diesel-async = { version = "0.7.0", features = ["postgres", "bb8", "pool"] }
 dotenvy = "0.15.7"
+futures-util = "0.3.31"
 hex = "0.4.3"
 rand_core = "0.9.3"
 serde = { version = "1.0.219", features = ["derive"] }

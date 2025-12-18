@@ -1,5 +1,5 @@
 use diesel::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;
 
@@ -13,6 +13,7 @@ pub enum PermissionLevel {
     Admin = 3,
 }
 
+#[derive(Deserialize)]
 pub enum ObjectType {
     World = 0,
     Avatar = 1,
