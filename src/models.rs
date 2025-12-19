@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;
 
-use crate::schema::{objects, tokens, users};
+use crate::schema::*;
 
 // diesel dosent like enums so we dont define these on db
 pub enum PermissionLevel {
@@ -19,7 +19,7 @@ pub enum ObjectType {
     Avatar = 1,
 }
 
-#[derive(Queryable, Serialize, Selectable, Insertable)]
+#[derive(Queryable, Identifiable, Serialize, Selectable, Insertable, Debug, Clone, AsChangeset)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Object {
     pub id: Uuid,
@@ -33,6 +33,8 @@ pub struct Object {
     pub image_size: i32,
     pub creator: Uuid,
     pub object_type: i16,
+    pub publicity: i16,
+    pub license: i32,
 }
 
 #[derive(Queryable, Selectable, Insertable)]
@@ -66,4 +68,18 @@ pub struct Token {
     pub token: Vec<u8>,
     pub expiry: Option<SystemTime>,
     pub renewable: bool,
+}
+
+#[derive(Queryable, Selectable, Insertable)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct License {
+    license: i32,
+    text: String,
+}
+
+#[derive(Queryable, Selectable, Insertable)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct Tag {
+    object: Uuid,
+    tag: String,
 }

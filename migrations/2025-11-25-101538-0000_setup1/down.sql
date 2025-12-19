@@ -20,3 +20,5 @@ DROP TABLE IF EXISTS "tags";
 DROP TABLE IF EXISTS "objects";
 DROP TABLE IF EXISTS "tokens";
 DROP TABLE IF EXISTS "users";
+DROP TABLE IF EXISTS custom_licenses_objects;
+DROP TABLE IF EXISTS custom_licenses;

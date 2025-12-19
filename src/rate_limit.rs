@@ -23,6 +23,7 @@ async fn check_limit_inner(
         .extract_parts::<ConnectInfo<SocketAddr>>()
         .await
         .unwrap();
+
     if let Some(addr_history) = state.request_history.read().await.get(&addr.ip()) {
         let mut requests_last_minute = 0;
         let mut requests_last_hour = 0;
@@ -30,26 +31,27 @@ async fn check_limit_inner(
 
         let mut addr_history = addr_history.lock().await;
 
-        addr_history.pop_back();
-        addr_history.push_front(SystemTime::now());
-
         let comparison_time = SystemTime::now();
+
+        while let Some(x) = addr_history.iter().last() {
+            if comparison_time.duration_since(*x).unwrap_or_default() < Duration::from_hours(24) {
+                break;
+            }
+            addr_history.pop_back();
+        }
+        addr_history.push_front(comparison_time);
+
         for req_time in addr_history.iter() {
             let time: Duration = comparison_time
                 .duration_since(*req_time)
                 .unwrap_or_default();
-            if time > Duration::from_hours(24) {
-                break;
+            if time < Duration::from_mins(1) {
+                requests_last_minute += 1;
             }
-            if time > Duration::from_hours(1) {
-                requests_last_day += 1;
-                continue;
-            }
-            if time > Duration::from_mins(1) {
+            if time < Duration::from_hours(1) {
                 requests_last_hour += 1;
-                continue;
             }
-            requests_last_minute += 1;
+            requests_last_day += 1;
         }
 
         if requests_last_minute > minute_limit {

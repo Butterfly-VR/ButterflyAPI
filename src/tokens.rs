@@ -14,7 +14,8 @@ use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::insert_into;
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use diesel_async::scoped_futures::ScopedFutureExt;
+use diesel_async::{AsyncConnection, RunQueryDsl};
 use rand_core::TryRngCore;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -70,7 +71,10 @@ pub async fn sign_in(
 
     let t1 = Instant::now();
     let mut conn = state.pool.get().await?;
+    let state = state.clone();
 
+    conn.transaction(|mut conn| {
+        async move {
     if let Ok(u) = users
         .select(User::as_select())
         .filter(email.eq(&json.email))
@@ -123,7 +127,10 @@ pub async fn sign_in(
             error_code: ErrorCode::UserDosentExist,
             error_message: Some(String::from("Invalid email or password.")),
         }),
-    ));
+    ));}
+    .scope_boxed()
+})
+.await
 }
 
 pub async fn renew(

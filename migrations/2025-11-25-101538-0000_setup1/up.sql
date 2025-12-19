@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" UUID NOT NULL UNIQUE,
-	"username" VARCHAR(20) NOT NULL,
+	"username" VARCHAR(32) NOT NULL,
 	"email" TEXT NOT NULL,
 	"password" BYTEA NOT NULL,
 	"salt" BYTEA NOT NULL,
@@ -29,8 +29,8 @@ ON "tokens" ("user", "token");
 
 CREATE TABLE IF NOT EXISTS "objects" (
 	"id" UUID NOT NULL UNIQUE,
-	"name" VARCHAR(20) NOT NULL,
-	"description" VARCHAR(512) NOT NULL,
+	"name" VARCHAR(32) NOT NULL,
+	"description" VARCHAR(4096) NOT NULL,
 	"flags" BOOLEAN[] NOT NULL,
 	"updated_at" TIMESTAMP NOT NULL DEFAULT now(),
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
@@ -39,14 +39,19 @@ CREATE TABLE IF NOT EXISTS "objects" (
 	"image_size" INTEGER NOT NULL,
 	"creator" UUID NOT NULL,
 	"object_type" SMALLINT NOT NULL,
+	"publicity" SMALLINT NOT NULL,
+	"license" INTEGER NOT NULL,
 	PRIMARY KEY("id")
 );
 
-
-
+CREATE TABLE IF NOT EXISTS "licenses" (
+	"license" SERIAL NOT NULL,
+	"text" VARCHAR(100000) NOT NULL UNIQUE,
+	PRIMARY KEY("license")
+);
 
 CREATE TABLE IF NOT EXISTS "tags" (
-	"tag" VARCHAR(16) NOT NULL,
+	"tag" VARCHAR(32) NOT NULL,
 	"object" UUID NOT NULL,
 	PRIMARY KEY("tag", "object")
 );
@@ -59,6 +64,9 @@ ADD FOREIGN KEY("user") REFERENCES "users"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
 ALTER TABLE "objects"
 ADD FOREIGN KEY("creator") REFERENCES "users"("id")
+ON UPDATE NO ACTION ON DELETE NO ACTION;
+ALTER TABLE "objects"
+ADD FOREIGN KEY("license") REFERENCES "licenses"("license")
 ON UPDATE NO ACTION ON DELETE NO ACTION;
 ALTER TABLE "tags"
 ADD FOREIGN KEY("object") REFERENCES "objects"("id")

@@ -14,7 +14,8 @@ use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::insert_into;
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use diesel_async::scoped_futures::ScopedFutureExt;
+use diesel_async::{AsyncConnection, RunQueryDsl};
 use rand_core::TryRngCore;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -60,51 +61,60 @@ pub async fn sign_up(
     Json(json): Json<SignUpRequest>,
 ) -> Result<(), ApiError> {
     let mut conn = state.pool.get().await?;
+    let state = state.clone();
 
-    if users
-        .count()
-        .filter(username.eq(&json.username))
-        .or_filter(email.eq(&json.email))
-        .get_result::<i64>(&mut conn)
-        .await?
-        != 0
-    {
-        return Err(ApiError::WithResponse(
-            http::StatusCode::BAD_REQUEST,
-            Json(ErrorInfo {
-                error_code: ErrorCode::UserAlreadyExists,
-                error_message: Some(String::from("Username or email already in use.")),
-            }),
-        ));
-    }
+    conn.transaction(|mut conn| {
+        async move {
+            if users
+                .count()
+                .filter(username.eq(&json.username))
+                .or_filter(email.eq(&json.email))
+                .get_result::<i64>(&mut conn)
+                .await?
+                != 0
+            {
+                return Err(ApiError::WithResponse(
+                    http::StatusCode::BAD_REQUEST,
+                    Json(ErrorInfo {
+                        error_code: ErrorCode::UserAlreadyExists,
+                        error_message: Some(String::from("Username or email already in use.")),
+                    }),
+                ));
+            }
 
-    let mut password_salt = [0; 64];
-    rand_core::OsRng.try_fill_bytes(&mut password_salt)?;
+            let mut password_salt = [0; 64];
+            rand_core::OsRng.try_fill_bytes(&mut password_salt)?;
 
-    if let Some(password_hash) = hash_password(
-        state.clone(),
-        json.password_hash.try_into().unwrap_or([0; 64]),
-        password_salt.clone(),
-    )
+            if let Some(password_hash) = hash_password(
+                state.clone(),
+                json.password_hash.try_into().unwrap_or([0; 64]),
+                password_salt.clone(),
+            )
+            .await
+            .ok()
+            {
+                let new_user: NewUser = NewUser {
+                    username: &json.username,
+                    password: &password_hash,
+                    salt: &password_salt,
+                    email: &json.email,
+                };
+                insert_into(users)
+                    .values::<User>(new_user.into())
+                    .execute(&mut conn)
+                    .await?;
+                return Ok(());
+            } else {
+                // most likely cause is that we didnt have a block available
+                info!(
+                    "failed to hash password, probably because we had no available memory blocks"
+                );
+                return Err(ApiError::WithCode(http::StatusCode::SERVICE_UNAVAILABLE));
+            }
+        }
+        .scope_boxed()
+    })
     .await
-    .ok()
-    {
-        let new_user: NewUser = NewUser {
-            username: &json.username,
-            password: &password_hash,
-            salt: &password_salt,
-            email: &json.email,
-        };
-        insert_into(users)
-            .values::<User>(new_user.into())
-            .execute(&mut conn)
-            .await?;
-        return Ok(());
-    } else {
-        // most likely cause is that we didnt have a block available
-        info!("failed to hash password, probably because we had no available memory blocks");
-        return Err(ApiError::WithCode(http::StatusCode::SERVICE_UNAVAILABLE));
-    }
 }
 
 pub async fn get_user(

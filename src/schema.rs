@@ -1,11 +1,19 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    licenses (license) {
+        license -> Int4,
+        #[max_length = 100000]
+        text -> Varchar,
+    }
+}
+
+diesel::table! {
     objects (id) {
         id -> Uuid,
-        #[max_length = 20]
+        #[max_length = 32]
         name -> Varchar,
-        #[max_length = 512]
+        #[max_length = 4096]
         description -> Varchar,
         flags -> Array<Nullable<Bool>>,
         updated_at -> Timestamp,
@@ -15,12 +23,14 @@ diesel::table! {
         image_size -> Int4,
         creator -> Uuid,
         object_type -> Int2,
+        publicity -> Int2,
+        license -> Int4,
     }
 }
 
 diesel::table! {
     tags (tag, object) {
-        #[max_length = 16]
+        #[max_length = 32]
         tag -> Varchar,
         object -> Uuid,
     }
@@ -38,7 +48,7 @@ diesel::table! {
 diesel::table! {
     users (id) {
         id -> Uuid,
-        #[max_length = 20]
+        #[max_length = 32]
         username -> Varchar,
         email -> Text,
         password -> Bytea,
@@ -51,7 +61,8 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(objects -> licenses (license));
 diesel::joinable!(tags -> objects (object));
 diesel::joinable!(tokens -> users (user));
 
-diesel::allow_tables_to_appear_in_same_query!(objects, tags, tokens, users,);
+diesel::allow_tables_to_appear_in_same_query!(licenses, objects, tags, tokens, users,);

@@ -40,6 +40,7 @@ const HASHER_MEMORY_BLOCKS: usize = 1;
 enum ErrorCode {
     UserAlreadyExists,
     UserDosentExist,
+    InsufficientPermissions,
 }
 
 enum ApiError {
@@ -48,7 +49,8 @@ enum ApiError {
 }
 
 impl<T: Error> From<T> for ApiError {
-    fn from(_: T) -> Self {
+    fn from(error: T) -> Self {
+        tracing::error!("{:?}", error);
         Self::WithCode(StatusCode::INTERNAL_SERVER_ERROR)
     }
 }
