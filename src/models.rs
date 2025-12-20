@@ -13,7 +13,7 @@ pub enum PermissionLevel {
     Admin = 3,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy)]
 pub enum ObjectType {
     World = 0,
     Avatar = 1,

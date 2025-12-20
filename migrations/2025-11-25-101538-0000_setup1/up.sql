@@ -1,10 +1,10 @@
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" UUID NOT NULL UNIQUE,
-	"username" VARCHAR(32) NOT NULL,
-	"email" TEXT NOT NULL,
+	"username" VARCHAR(32) NOT NULL UNIQUE,
+	"email" TEXT NOT NULL UNIQUE,
 	"password" BYTEA NOT NULL,
 	"salt" BYTEA NOT NULL,
-	"permisions" SMALLINT NOT NULL,
+	"permisions" BOOLEAN[] NOT NULL,
 	"trust" INTEGER NOT NULL,
 	"verified_email" BOOLEAN NOT NULL,
 	"homeworld" UUID,
@@ -12,24 +12,17 @@ CREATE TABLE IF NOT EXISTS "users" (
 	PRIMARY KEY("id")
 );
 
-
-
-
 CREATE TABLE IF NOT EXISTS "tokens" (
+	"token" BYTEA NOT NULL UNIQUE,
 	"user" UUID NOT NULL,
-	"token" BYTEA NOT NULL,
 	"renewable" BOOLEAN NOT NULL,
-	"expiry" TIMESTAMP,
-	PRIMARY KEY("user", "token")
+	"expiry" TIMESTAMP NOT NULL DEFAULT now(),
+	PRIMARY KEY("token")
 );
-
-
-CREATE INDEX "tokens_index_0"
-ON "tokens" ("user", "token");
 
 CREATE TABLE IF NOT EXISTS "objects" (
 	"id" UUID NOT NULL UNIQUE,
-	"name" VARCHAR(32) NOT NULL,
+	"name" VARCHAR(32) NOT NULL UNIQUE,
 	"description" VARCHAR(4096) NOT NULL,
 	"flags" BOOLEAN[] NOT NULL,
 	"updated_at" TIMESTAMP NOT NULL DEFAULT now(),
@@ -41,14 +34,19 @@ CREATE TABLE IF NOT EXISTS "objects" (
 	"object_type" SMALLINT NOT NULL,
 	"publicity" SMALLINT NOT NULL,
 	"license" INTEGER NOT NULL,
+	"encryption_key" BYTEA NOT NULL,
+	"encryption_iv" BYTEA NOT NULL
 	PRIMARY KEY("id")
 );
 
 CREATE TABLE IF NOT EXISTS "licenses" (
-	"license" SERIAL NOT NULL,
+	"license" SERIAL NOT NULL UNIQUE,
 	"text" VARCHAR(100000) NOT NULL UNIQUE,
 	PRIMARY KEY("license")
 );
+
+CREATE INDEX "licenses_text_index"
+ON "licenses" USING HASH ("text")
 
 CREATE TABLE IF NOT EXISTS "tags" (
 	"tag" VARCHAR(32) NOT NULL,
@@ -56,24 +54,31 @@ CREATE TABLE IF NOT EXISTS "tags" (
 	PRIMARY KEY("tag", "object")
 );
 
+CREATE INDEX "tags_tag_index"
+ON "tags" ("tag");
+CREATE INDEX "tags_object_index"
+ON "tags" ("object");
 
-CREATE INDEX "tags_index_1"
-ON "tags" ("tag", "object");
+
+
 ALTER TABLE "tokens"
 ADD FOREIGN KEY("user") REFERENCES "users"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
+
 ALTER TABLE "objects"
 ADD FOREIGN KEY("creator") REFERENCES "users"("id")
-ON UPDATE NO ACTION ON DELETE NO ACTION;
+ON UPDATE CASCADE ON DELETE CASCADE;
 ALTER TABLE "objects"
 ADD FOREIGN KEY("license") REFERENCES "licenses"("license")
-ON UPDATE NO ACTION ON DELETE NO ACTION;
+ON UPDATE CASCADE ON DELETE NO ACTION;
+
 ALTER TABLE "tags"
 ADD FOREIGN KEY("object") REFERENCES "objects"("id")
-ON UPDATE NO ACTION ON DELETE NO ACTION;
+ON UPDATE CASCADE ON DELETE CASCADE;
+
 ALTER TABLE "users"
 ADD FOREIGN KEY("homeworld") REFERENCES "objects"("id")
-ON UPDATE NO ACTION ON DELETE NO ACTION;
+ON UPDATE CASCADE ON DELETE SET NULL;
 ALTER TABLE "users"
 ADD FOREIGN KEY("avatar") REFERENCES "objects"("id")
-ON UPDATE NO ACTION ON DELETE NO ACTION;
+ON UPDATE CASCADE ON DELETE SET NULL;

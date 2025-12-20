@@ -6,7 +6,9 @@ use crate::auth::check_auth;
 use crate::hash::hash_password;
 use crate::models;
 use crate::models::*;
+use crate::schema::licenses;
 use crate::schema::objects;
+use crate::schema::tags;
 use axum::Extension;
 use axum::body::Body;
 use axum::body::BodyDataStream;
@@ -28,6 +30,7 @@ use futures_util::{Stream, TryStreamExt};
 use rand_core::TryRngCore;
 use serde::Deserialize;
 use std::sync::Arc;
+use std::time::SystemTime;
 use tracing::info;
 use uuid::Uuid;
 
@@ -40,9 +43,9 @@ pub struct ObjectUpload {
     name: String,
     description: String,
     tags: Vec<String>,
+    flags: Vec<bool>,
     publicity: i16,
-    license: i32,
-    custom_license: Option<String>,
+    license: String,
 }
 
 pub async fn create_or_update_object(
@@ -63,6 +66,7 @@ pub async fn create_or_update_object(
                 .await
                 .optional()?
             {
+                // update existing object
                 if object.creator != user_id {
                     return Err(ApiError::WithResponse(
                         StatusCode::BAD_REQUEST,
@@ -74,19 +78,82 @@ pub async fn create_or_update_object(
                         }),
                     ));
                 }
+
                 let mut new_object: Object = object.clone();
+
                 new_object.name = json.name;
                 new_object.description = json.description;
                 new_object.publicity = json.publicity;
 
-                if json.license != 3{
-                    new_object.license = json.license
-                }
-                else{
-                    if let Some(license_number) =
+                new_object.updated_at = SystemTime::now();
+
+                if let Some(license_number) = licenses::table
+                    .select(licenses::license)
+                    .filter(licenses::text.eq(&json.license))
+                    .get_result::<i32>(&mut conn)
+                    .await
+                    .optional()?
+                {
+                    new_object.license = license_number;
+                } else {
+                    new_object.license = insert_into(licenses::table)
+                        .values(licenses::text.eq(&json.license))
+                        .returning(licenses::license)
+                        .get_result(&mut conn)
+                        .await?;
                 }
 
-                diesel::update(&object).set(new_object);
+                // delete all previous tags before readding
+                // would probably be faster to get existing tags and only delete / insert the diff
+                diesel::delete(tags::table)
+                    .filter(tags::object.eq(object_id))
+                    .execute(&mut conn)
+                    .await?;
+
+                for tag in json.tags {
+                    insert_into(tags::table)
+                        .values((tags::tag.eq(tag), tags::object.eq(object_id)))
+                        .execute(&mut conn)
+                        .await?;
+                }
+
+                diesel::update(&object)
+                    .set(new_object)
+                    .execute(&mut conn)
+                    .await?;
+            } else {
+                // create new object
+                let object: Object = Object {
+                    id: object_id,
+                    name: json.name,
+                    description: json.description,
+                    flags: json.flags.into_iter().map(|x| Some(x)).collect(),
+                    updated_at: SystemTime::now(),
+                    created_at: SystemTime::now(),
+                    verified: false,
+                    object_size: 0,
+                    image_size: 0,
+                    creator: user_id,
+                    object_type: object_type as i16,
+                    publicity: json.publicity,
+                    license: insert_into(licenses::table)
+                        .values(licenses::text.eq(&json.license))
+                        .returning(licenses::license)
+                        .get_result(&mut conn)
+                        .await?,
+                };
+
+                for tag in json.tags {
+                    insert_into(tags::table)
+                        .values((tags::tag.eq(tag), tags::object.eq(object_id)))
+                        .execute(&mut conn)
+                        .await?;
+                }
+
+                diesel::insert_into(objects::table)
+                    .values(object)
+                    .execute(&mut conn)
+                    .await?;
             }
 
             Ok(())
@@ -100,7 +167,17 @@ pub async fn get_object_info(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Json<models::Object>, ApiError> {
-    Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))
+    let mut conn = state.pool.get().await?;
+
+    objects::table
+        .select(Object::as_select())
+        .filter(objects::id.eq(&object_id))
+        .filter(objects::object_type.eq(object_type as i16))
+        .first(&mut conn)
+        .await
+        .optional()?
+        .map(|x| Json(x))
+        .ok_or(ApiError::WithCode(StatusCode::NOT_FOUND))
 }
 
 pub async fn get_object_file(
