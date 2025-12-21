@@ -1,6 +1,7 @@
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
+use strum_macros::IntoStaticStr;
 use uuid::Uuid;
 
 use crate::schema::*;
@@ -13,7 +14,7 @@ pub enum PermissionLevel {
     Admin = 3,
 }
 
-#[derive(Deserialize, Clone, Copy)]
+#[derive(Deserialize, Clone, Copy, IntoStaticStr)]
 pub enum ObjectType {
     World = 0,
     Avatar = 1,

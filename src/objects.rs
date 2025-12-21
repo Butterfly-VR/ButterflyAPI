@@ -9,6 +9,7 @@ use crate::models::*;
 use crate::schema::licenses;
 use crate::schema::objects;
 use crate::schema::tags;
+use aws_sdk_s3::primitives::ByteStream;
 use axum::Extension;
 use axum::body::Body;
 use axum::body::BodyDataStream;
@@ -29,8 +30,11 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::{Stream, TryStreamExt};
 use rand_core::TryRngCore;
 use serde::Deserialize;
+use std::io::Write;
 use std::sync::Arc;
 use std::time::SystemTime;
+use tempfile::SpooledTempFile;
+use tokio::io::AsyncBufRead;
 use tracing::info;
 use uuid::Uuid;
 
@@ -184,8 +188,16 @@ pub async fn get_object_file(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
-    // todo: s3 object streamer with range requests?
-    Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))
+    let enum_str: &'static str = object_type.into();
+    let object = state
+        .s3_client
+        .get_object()
+        .bucket(enum_str.to_owned())
+        .key(object_id.to_string())
+        .send()
+        .await?;
+    let x = object.body.into_async_read();
+    Ok(Body::from_stream(tokio_util::io::ReaderStream::new(x)))
 }
 
 pub async fn change_object_file(
@@ -200,8 +212,16 @@ pub async fn get_object_image(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
-    // todo: s3 object streamer with range requests?
-    Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))
+    let enum_str: &'static str = object_type.into();
+    let object = state
+        .s3_client
+        .get_object()
+        .bucket(enum_str.to_owned() + "_images")
+        .key(object_id.to_string())
+        .send()
+        .await?;
+    let x = object.body.into_async_read();
+    Ok(Body::from_stream(tokio_util::io::ReaderStream::new(x)))
 }
 
 pub async fn change_object_image(
