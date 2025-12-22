@@ -17,7 +17,6 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get};
-use bytes::Bytes;
 use diesel::insert_into;
 use diesel::prelude::*;
 use diesel_async::AsyncConnection;
