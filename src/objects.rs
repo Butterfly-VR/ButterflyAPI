@@ -3,7 +3,6 @@ use crate::AppState;
 use crate::ErrorCode;
 use crate::ErrorInfo;
 use crate::auth::check_auth;
-use crate::hash::hash_password;
 use crate::models;
 use crate::models::*;
 use crate::schema::licenses;
@@ -12,30 +11,24 @@ use crate::schema::tags;
 use aws_sdk_s3::primitives::ByteStream;
 use axum::Extension;
 use axum::body::Body;
-use axum::body::BodyDataStream;
-use axum::debug_handler;
 use axum::extract::Path;
 use axum::extract::Request;
 use axum::extract::State;
-use axum::http;
 use axum::http::StatusCode;
 use axum::middleware;
-use axum::{Json, Router, routing::get, routing::post};
-use bytes::Bytes;
+use axum::{Json, Router, routing::get};
 use diesel::insert_into;
 use diesel::prelude::*;
 use diesel_async::AsyncConnection;
 use diesel_async::RunQueryDsl;
 use diesel_async::scoped_futures::ScopedFutureExt;
-use futures_util::{Stream, TryStreamExt};
-use rand_core::TryRngCore;
+use futures_util::StreamExt;
 use serde::Deserialize;
 use std::io::Write;
 use std::sync::Arc;
 use std::time::SystemTime;
-use tempfile::SpooledTempFile;
-use tokio::io::AsyncBufRead;
-use tracing::info;
+use tempfile::NamedTempFile;
+use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
 const OBJECT_INFO_ROUTE: &str = "/{object_type}/{uuid}";
@@ -73,7 +66,7 @@ pub async fn create_or_update_object(
                 // update existing object
                 if object.creator != user_id {
                     return Err(ApiError::WithResponse(
-                        StatusCode::BAD_REQUEST,
+                        StatusCode::FORBIDDEN,
                         Json(ErrorInfo {
                             error_code: ErrorCode::InsufficientPermissions,
                             error_message: Some(
@@ -203,8 +196,69 @@ pub async fn get_object_file(
 pub async fn change_object_file(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
-    request: Request,
+    Extension(user_id): Extension<Uuid>,
+    mut request: Request,
 ) -> Result<(), ApiError> {
+    let mut conn = state.pool.get().await?;
+
+    if let Some(object) = objects::table
+        .select(Object::as_select())
+        .filter(objects::id.eq(&object_id))
+        .filter(objects::object_type.eq(object_type as i16))
+        .first(&mut conn)
+        .await
+        .optional()?
+    {
+        if object.creator != user_id {
+            return Err(ApiError::WithResponse(
+                StatusCode::FORBIDDEN,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::InsufficientPermissions,
+                    error_message: Some(
+                        "You do not have permission to edit this object.".to_owned(),
+                    ),
+                }),
+            ));
+        }
+
+        let mut temp_file = NamedTempFile::new()?;
+        let mut stream = std::mem::replace(request.body_mut(), Body::empty()).into_data_stream();
+
+        let temp_file = spawn_blocking(async move || {
+            while let Some(Ok(next)) = stream
+                .next()
+                .await
+                .and_then(|x| Some(x.and_then(|x| Ok(Box::new(x)))))
+            {
+                temp_file.write_all(&next).unwrap()
+            }
+            temp_file
+        })
+        .await?
+        .await;
+
+        let enum_str: &'static str = object_type.into();
+
+        diesel::update(objects::table)
+            .filter(objects::id.eq(&object_id))
+            .filter(objects::object_type.eq(object_type as i16))
+            .set((
+                objects::verified.eq(false),
+                objects::updated_at.eq(SystemTime::now()),
+            ))
+            .execute(&mut conn)
+            .await?;
+
+        state
+            .s3_client
+            .put_object()
+            .bucket(enum_str.to_owned())
+            .key(object_id.to_string())
+            .body(ByteStream::from_path(temp_file.path()).await?);
+    } else {
+        return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
+    }
+
     Ok(())
 }
 
@@ -227,15 +281,69 @@ pub async fn get_object_image(
 pub async fn change_object_image(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
-    request: Request,
+    Extension(user_id): Extension<Uuid>,
+    mut request: Request,
 ) -> Result<(), ApiError> {
-    Ok(())
-}
+    let mut conn = state.pool.get().await?;
 
-async fn stream_to_s3<S, E>(bucket: String, object: Uuid, stream: S) -> Result<(), ApiError>
-where
-    S: Stream<Item = Result<Bytes, E>>,
-{
+    if let Some(object) = objects::table
+        .select(Object::as_select())
+        .filter(objects::id.eq(&object_id))
+        .filter(objects::object_type.eq(object_type as i16))
+        .first(&mut conn)
+        .await
+        .optional()?
+    {
+        if object.creator != user_id {
+            return Err(ApiError::WithResponse(
+                StatusCode::FORBIDDEN,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::InsufficientPermissions,
+                    error_message: Some(
+                        "You do not have permission to edit this object.".to_owned(),
+                    ),
+                }),
+            ));
+        }
+
+        let mut temp_file = NamedTempFile::new()?;
+        let mut stream = std::mem::replace(request.body_mut(), Body::empty()).into_data_stream();
+
+        let temp_file = spawn_blocking(async move || {
+            while let Some(Ok(next)) = stream
+                .next()
+                .await
+                .and_then(|x| Some(x.and_then(|x| Ok(Box::new(x)))))
+            {
+                temp_file.write_all(&next).unwrap()
+            }
+            temp_file
+        })
+        .await?
+        .await;
+
+        let enum_str: &'static str = object_type.into();
+
+        diesel::update(objects::table)
+            .filter(objects::id.eq(&object_id))
+            .filter(objects::object_type.eq(object_type as i16))
+            .set((
+                objects::verified.eq(false),
+                objects::updated_at.eq(SystemTime::now()),
+            ))
+            .execute(&mut conn)
+            .await?;
+
+        state
+            .s3_client
+            .put_object()
+            .bucket(enum_str.to_owned() + "_images")
+            .key(object_id.to_string())
+            .body(ByteStream::from_path(temp_file.path()).await?);
+    } else {
+        return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
+    }
+
     Ok(())
 }
 

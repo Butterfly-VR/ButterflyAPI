@@ -41,7 +41,6 @@ enum ErrorCode {
     UserAlreadyExists,
     UserDosentExist,
     InsufficientPermissions,
-    MissingRequiredField,
 }
 
 enum ApiError {
