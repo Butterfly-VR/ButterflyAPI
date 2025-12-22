@@ -25,6 +25,8 @@ diesel::table! {
         object_type -> Int2,
         publicity -> Int2,
         license -> Int4,
+        encryption_key -> Bytea,
+        encryption_iv -> Bytea,
     }
 }
 
@@ -37,11 +39,11 @@ diesel::table! {
 }
 
 diesel::table! {
-    tokens (user, token) {
-        user -> Uuid,
+    tokens (token) {
         token -> Bytea,
+        user -> Uuid,
         renewable -> Bool,
-        expiry -> Nullable<Timestamp>,
+        expiry -> Timestamp,
     }
 }
 
@@ -53,7 +55,7 @@ diesel::table! {
         email -> Text,
         password -> Bytea,
         salt -> Bytea,
-        permisions -> Int2,
+        permisions -> Array<Nullable<Bool>>,
         trust -> Int4,
         verified_email -> Bool,
         homeworld -> Nullable<Uuid>,

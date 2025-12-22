@@ -42,7 +42,7 @@ pub struct SignInRequest {
 #[derive(Serialize)]
 pub struct SignInResponse {
     token: Vec<u8>,
-    token_expiry: Option<u64>,
+    token_expiry: u64,
     renewable: bool,
 }
 
@@ -52,8 +52,9 @@ impl From<Token> for SignInResponse {
             token: value.token,
             token_expiry: value
                 .expiry
-                .and_then(|x| x.duration_since(SystemTime::UNIX_EPOCH).ok())
-                .map(|x| x.as_secs()),
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap() // probably fine, even if it breaks somehow should just cause a 500
+                .as_secs(),
             renewable: value.renewable,
         }
     }
@@ -96,7 +97,7 @@ pub async fn sign_in(
             let token_value: Token = Token {
                 user: u.id,
                 token: t,
-                expiry: SystemTime::now().checked_add(NEW_TOKEN_EXPIRY),
+                expiry: SystemTime::now() + NEW_TOKEN_EXPIRY,
                 renewable: json.allow_renew,
             };
 
@@ -145,7 +146,7 @@ pub async fn renew(
     let token_value: Token = Token {
         user: user_id.0,
         token: t,
-        expiry: SystemTime::now().checked_add(NEW_TOKEN_EXPIRY),
+        expiry: SystemTime::now() + NEW_TOKEN_EXPIRY,
         renewable: true,
     };
 

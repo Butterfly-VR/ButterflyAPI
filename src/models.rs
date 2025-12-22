@@ -1,20 +1,12 @@
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
-use strum_macros::IntoStaticStr;
 use uuid::Uuid;
 
 use crate::schema::*;
 
 // diesel dosent like enums so we dont define these on db
-pub enum PermissionLevel {
-    None = 0,
-    Creator = 1,
-    Moderator = 2,
-    Admin = 3,
-}
-
-#[derive(Deserialize, Clone, Copy, IntoStaticStr)]
+#[derive(Deserialize, Clone, Copy)]
 pub enum ObjectType {
     World = 0,
     Avatar = 1,
@@ -36,6 +28,8 @@ pub struct Object {
     pub object_type: i16,
     pub publicity: i16,
     pub license: i32,
+    pub encryption_key: Vec<u8>,
+    pub encryption_iv: Vec<u8>,
 }
 
 #[derive(Queryable, Selectable, Insertable)]
@@ -47,7 +41,7 @@ pub struct User {
     pub salt: Vec<u8>,
     pub email: String,
     pub verified_email: bool,
-    pub permisions: i16, // PermisionLevel
+    pub permisions: Vec<Option<bool>>,
     pub trust: i32,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
@@ -67,7 +61,7 @@ pub struct PublicUser {
 pub struct Token {
     pub user: Uuid,
     pub token: Vec<u8>,
-    pub expiry: Option<SystemTime>,
+    pub expiry: SystemTime,
     pub renewable: bool,
 }
 

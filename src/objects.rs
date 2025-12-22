@@ -8,31 +8,32 @@ use crate::models::*;
 use crate::schema::licenses;
 use crate::schema::objects;
 use crate::schema::tags;
+use aws_sdk_s3::Client;
 use aws_sdk_s3::primitives::ByteStream;
 use axum::Extension;
 use axum::body::Body;
 use axum::extract::Path;
-use axum::extract::Request;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get};
+use bytes::Bytes;
 use diesel::insert_into;
 use diesel::prelude::*;
 use diesel_async::AsyncConnection;
 use diesel_async::RunQueryDsl;
 use diesel_async::scoped_futures::ScopedFutureExt;
-use futures_util::StreamExt;
+
+use futures_util::TryStreamExt;
 use serde::Deserialize;
-use std::io::Write;
 use std::sync::Arc;
 use std::time::SystemTime;
-use tempfile::NamedTempFile;
-use tokio::task::spawn_blocking;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
 const OBJECT_INFO_ROUTE: &str = "/{object_type}/{uuid}";
-const OBJECT_DOWNLOAD_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/download");
+const OBJECT_DOWNLOAD_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/epck");
 const OBJECT_IMAGE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/image");
 
 #[derive(Deserialize)]
@@ -43,6 +44,8 @@ pub struct ObjectUpload {
     flags: Vec<bool>,
     publicity: i16,
     license: String,
+    encryption_key: Vec<u8>,
+    encryption_iv: Vec<u8>,
 }
 
 pub async fn create_or_update_object(
@@ -87,7 +90,7 @@ pub async fn create_or_update_object(
                 if let Some(license_number) = licenses::table
                     .select(licenses::license)
                     .filter(licenses::text.eq(&json.license))
-                    .get_result::<i32>(&mut conn)
+                    .first::<i32>(&mut conn)
                     .await
                     .optional()?
                 {
@@ -120,6 +123,24 @@ pub async fn create_or_update_object(
                     .await?;
             } else {
                 // create new object
+
+                let license: i32;
+                if let Some(license_number) = licenses::table
+                    .select(licenses::license)
+                    .filter(licenses::text.eq(&json.license))
+                    .first::<i32>(&mut conn)
+                    .await
+                    .optional()?
+                {
+                    license = license_number;
+                } else {
+                    license = insert_into(licenses::table)
+                        .values(licenses::text.eq(&json.license))
+                        .returning(licenses::license)
+                        .get_result(&mut conn)
+                        .await?;
+                }
+
                 let object: Object = Object {
                     id: object_id,
                     name: json.name,
@@ -133,12 +154,15 @@ pub async fn create_or_update_object(
                     creator: user_id,
                     object_type: object_type as i16,
                     publicity: json.publicity,
-                    license: insert_into(licenses::table)
-                        .values(licenses::text.eq(&json.license))
-                        .returning(licenses::license)
-                        .get_result(&mut conn)
-                        .await?,
+                    encryption_key: json.encryption_key,
+                    encryption_iv: json.encryption_iv,
+                    license: license,
                 };
+
+                diesel::insert_into(objects::table)
+                    .values(object)
+                    .execute(&mut conn)
+                    .await?;
 
                 for tag in json.tags {
                     insert_into(tags::table)
@@ -146,11 +170,6 @@ pub async fn create_or_update_object(
                         .execute(&mut conn)
                         .await?;
                 }
-
-                diesel::insert_into(objects::table)
-                    .values(object)
-                    .execute(&mut conn)
-                    .await?;
             }
 
             Ok(())
@@ -181,7 +200,11 @@ pub async fn get_object_file(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
-    let enum_str: &'static str = object_type.into();
+    let enum_str: &'static str = match object_type {
+        ObjectType::World => "worlds",
+        ObjectType::Avatar => "avatars",
+    };
+
     let object = state
         .s3_client
         .get_object()
@@ -197,7 +220,7 @@ pub async fn change_object_file(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
     Extension(user_id): Extension<Uuid>,
-    mut request: Request,
+    body: Body,
 ) -> Result<(), ApiError> {
     let mut conn = state.pool.get().await?;
 
@@ -221,23 +244,12 @@ pub async fn change_object_file(
             ));
         }
 
-        let mut temp_file = NamedTempFile::new()?;
-        let mut stream = std::mem::replace(request.body_mut(), Body::empty()).into_data_stream();
+        let stream = body.into_data_stream();
 
-        let temp_file = spawn_blocking(async move || {
-            while let Some(Ok(next)) = stream
-                .next()
-                .await
-                .and_then(|x| Some(x.and_then(|x| Ok(Box::new(x)))))
-            {
-                temp_file.write_all(&next).unwrap()
-            }
-            temp_file
-        })
-        .await?
-        .await;
-
-        let enum_str: &'static str = object_type.into();
+        let enum_str: &'static str = match object_type {
+            ObjectType::World => "worlds",
+            ObjectType::Avatar => "avatars",
+        };
 
         diesel::update(objects::table)
             .filter(objects::id.eq(&object_id))
@@ -249,12 +261,15 @@ pub async fn change_object_file(
             .execute(&mut conn)
             .await?;
 
-        state
-            .s3_client
-            .put_object()
-            .bucket(enum_str.to_owned())
-            .key(object_id.to_string())
-            .body(ByteStream::from_path(temp_file.path()).await?);
+        upload_object_stream(
+            &state.s3_client,
+            enum_str,
+            &object_id.to_string(),
+            &mut tokio_util::io::StreamReader::new(stream.map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::NotFound, "no error handling here")
+            })),
+        )
+        .await?;
     } else {
         return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
     }
@@ -266,11 +281,15 @@ pub async fn get_object_image(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
-    let enum_str: &'static str = object_type.into();
+    let enum_str: &'static str = match object_type {
+        ObjectType::World => "worlds",
+        ObjectType::Avatar => "avatars",
+    };
+
     let object = state
         .s3_client
         .get_object()
-        .bucket(enum_str.to_owned() + "_images")
+        .bucket(enum_str.to_owned() + "-images")
         .key(object_id.to_string())
         .send()
         .await?;
@@ -282,7 +301,7 @@ pub async fn change_object_image(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
     Extension(user_id): Extension<Uuid>,
-    mut request: Request,
+    body: Body,
 ) -> Result<(), ApiError> {
     let mut conn = state.pool.get().await?;
 
@@ -306,23 +325,12 @@ pub async fn change_object_image(
             ));
         }
 
-        let mut temp_file = NamedTempFile::new()?;
-        let mut stream = std::mem::replace(request.body_mut(), Body::empty()).into_data_stream();
+        let stream = body.into_data_stream();
 
-        let temp_file = spawn_blocking(async move || {
-            while let Some(Ok(next)) = stream
-                .next()
-                .await
-                .and_then(|x| Some(x.and_then(|x| Ok(Box::new(x)))))
-            {
-                temp_file.write_all(&next).unwrap()
-            }
-            temp_file
-        })
-        .await?
-        .await;
-
-        let enum_str: &'static str = object_type.into();
+        let enum_str: &'static str = match object_type {
+            ObjectType::World => "worlds",
+            ObjectType::Avatar => "avatars",
+        };
 
         diesel::update(objects::table)
             .filter(objects::id.eq(&object_id))
@@ -334,15 +342,84 @@ pub async fn change_object_image(
             .execute(&mut conn)
             .await?;
 
-        state
-            .s3_client
-            .put_object()
-            .bucket(enum_str.to_owned() + "_images")
-            .key(object_id.to_string())
-            .body(ByteStream::from_path(temp_file.path()).await?);
+        upload_object_stream(
+            &state.s3_client,
+            &(enum_str.to_owned() + "-images"),
+            &object_id.to_string(),
+            &mut tokio_util::io::StreamReader::new(stream.map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::NotFound, "no error handling here")
+            })),
+        )
+        .await?;
     } else {
         return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
     }
+
+    Ok(())
+}
+
+async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
+    client: &Client,
+    bucket: &str,
+    key: &str,
+    stream: &mut S,
+) -> Result<(), ApiError> {
+    // 1MB
+    const CHUNK_SIZE: usize = 1024 * 1024;
+
+    let multipart_upload = client
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(key)
+        .send()
+        .await?;
+    let upload_id = multipart_upload
+        .upload_id
+        .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    let mut parts: Vec<aws_sdk_s3::types::CompletedPart> = vec![];
+
+    loop {
+        let mut chunk = vec![0u8; CHUNK_SIZE];
+        let read_size: usize = stream.read(&mut chunk).await?;
+        chunk.resize(read_size, 0);
+
+        if chunk.len() == 0 {
+            break;
+        }
+
+        let part_number = parts.len() as i32 + 1;
+
+        let part = client
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .part_number(part_number)
+            .upload_id(&upload_id)
+            .body(ByteStream::from(chunk))
+            .send()
+            .await?;
+        let part = aws_sdk_s3::types::CompletedPart::builder()
+            .e_tag(
+                part.e_tag()
+                    .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?,
+            )
+            .part_number(part_number)
+            .build();
+        parts.push(part);
+    }
+
+    let completed_multipart_upload = aws_sdk_s3::types::CompletedMultipartUpload::builder()
+        .set_parts(Some(parts))
+        .build();
+    client
+        .complete_multipart_upload()
+        .bucket(bucket)
+        .key(key)
+        .upload_id(&upload_id)
+        .multipart_upload(completed_multipart_upload)
+        .send()
+        .await?;
 
     Ok(())
 }

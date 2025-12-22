@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS "objects" (
 	"publicity" SMALLINT NOT NULL,
 	"license" INTEGER NOT NULL,
 	"encryption_key" BYTEA NOT NULL,
-	"encryption_iv" BYTEA NOT NULL
+	"encryption_iv" BYTEA NOT NULL,
 	PRIMARY KEY("id")
 );
 
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS "licenses" (
 );
 
 CREATE INDEX "licenses_text_index"
-ON "licenses" USING HASH ("text")
+ON "licenses" USING HASH ("text");
 
 CREATE TABLE IF NOT EXISTS "tags" (
 	"tag" VARCHAR(32) NOT NULL,
