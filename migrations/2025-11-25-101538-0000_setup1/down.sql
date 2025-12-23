@@ -8,11 +8,6 @@ ALTER TABLE "objects" DROP CONSTRAINT objects_creator_fkey;
 
 ALTER TABLE "tags" DROP CONSTRAINT tags_object_fkey;
 
-
--- Drop indexes
-DROP INDEX "licenses_text_index";
-
-
 -- Drop tables in reverse order
 DROP TABLE "tags";
 DROP TABLE "objects";

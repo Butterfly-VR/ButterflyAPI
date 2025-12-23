@@ -48,16 +48,28 @@ diesel::table! {
 }
 
 diesel::table! {
+    unverified_users (id) {
+        id -> Uuid,
+        #[max_length = 32]
+        username -> Varchar,
+        #[max_length = 128]
+        email -> Varchar,
+        password -> Bytea,
+        salt -> Bytea,
+    }
+}
+
+diesel::table! {
     users (id) {
         id -> Uuid,
         #[max_length = 32]
         username -> Varchar,
-        email -> Text,
+        #[max_length = 128]
+        email -> Varchar,
         password -> Bytea,
         salt -> Bytea,
         permisions -> Array<Nullable<Bool>>,
         trust -> Int4,
-        verified_email -> Bool,
         homeworld -> Nullable<Uuid>,
         avatar -> Nullable<Uuid>,
     }
@@ -67,4 +79,11 @@ diesel::joinable!(objects -> licenses (license));
 diesel::joinable!(tags -> objects (object));
 diesel::joinable!(tokens -> users (user));
 
-diesel::allow_tables_to_appear_in_same_query!(licenses, objects, tags, tokens, users,);
+diesel::allow_tables_to_appear_in_same_query!(
+    licenses,
+    objects,
+    tags,
+    tokens,
+    unverified_users,
+    users,
+);

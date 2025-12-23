@@ -30,13 +30,12 @@ pub async fn check_auth(
         .get("token")
         .and_then(|x| hex::decode(x).ok())
         .unwrap_or_default();
-    if let Some(Some(user_id)) = tokens
+    if let Ok(Some(user_id)) = tokens
         .select(user)
         .filter(token.eq(header_token))
         .first::<Uuid>(&mut conn)
         .await
         .optional()
-        .ok()
     {
         req.extensions_mut().insert(user_id);
         return Ok(next.run(req).await);

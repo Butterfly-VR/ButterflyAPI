@@ -55,6 +55,33 @@ pub async fn create_or_update_object(
 ) -> Result<(), ApiError> {
     let mut conn = state.pool.get().await?;
 
+    if json.name.len() < 6 || json.name.len() > 32 || json.description.len() > 4096 {
+        return Err(ApiError::WithResponse(
+            StatusCode::BAD_REQUEST,
+            Json(ErrorInfo {
+                error_code: ErrorCode::BadRequestLength,
+                error_message: Some(String::from(
+                    "Name or description was wrong length. This shouldnt happen",
+                )),
+            }),
+        ));
+    }
+
+    for tag in json.tags.iter() {
+        if tag.len() < 3 || tag.len() > 32 {
+            return Err(ApiError::WithResponse(
+                StatusCode::BAD_REQUEST,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::BadRequestLength,
+                    error_message: Some(format!(
+                        "Tag {:?} was wrong length. This shouldnt happen",
+                        tag
+                    )),
+                }),
+            ));
+        }
+    }
+
     conn.transaction(|mut conn| {
         async move {
             if let Some(object) = objects::table
@@ -123,6 +150,24 @@ pub async fn create_or_update_object(
             } else {
                 // create new object
 
+                if objects::table
+                    .count()
+                    .filter(objects::name.eq(&json.name))
+                    .get_result::<i64>(&mut conn)
+                    .await?
+                    != 0
+                {
+                    return Err(ApiError::WithResponse(
+                        StatusCode::BAD_REQUEST,
+                        Json(ErrorInfo {
+                            error_code: ErrorCode::AlreadyExists,
+                            error_message: Some(
+                                "An object with that name already exists".to_owned(),
+                            ),
+                        }),
+                    ));
+                }
+
                 let license: i32;
                 if let Some(license_number) = licenses::table
                     .select(licenses::license)
@@ -144,7 +189,7 @@ pub async fn create_or_update_object(
                     id: object_id,
                     name: json.name,
                     description: json.description,
-                    flags: json.flags.into_iter().map(|x| Some(x)).collect(),
+                    flags: json.flags.into_iter().map(Some).collect(),
                     updated_at: SystemTime::now(),
                     created_at: SystemTime::now(),
                     verified: false,
@@ -155,7 +200,7 @@ pub async fn create_or_update_object(
                     publicity: json.publicity,
                     encryption_key: json.encryption_key,
                     encryption_iv: json.encryption_iv,
-                    license: license,
+                    license,
                 };
 
                 diesel::insert_into(objects::table)
@@ -191,8 +236,14 @@ pub async fn get_object_info(
         .first(&mut conn)
         .await
         .optional()?
-        .map(|x| Json(x))
-        .ok_or(ApiError::WithCode(StatusCode::NOT_FOUND))
+        .map(Json)
+        .ok_or(ApiError::WithResponse(
+            StatusCode::NOT_FOUND,
+            Json(ErrorInfo {
+                error_code: ErrorCode::DosentExist,
+                error_message: None,
+            }),
+        ))
 }
 
 pub async fn get_object_file(
@@ -270,7 +321,13 @@ pub async fn change_object_file(
         )
         .await?;
     } else {
-        return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
+        return Err(ApiError::WithResponse(
+            StatusCode::NOT_FOUND,
+            Json(ErrorInfo {
+                error_code: ErrorCode::DosentExist,
+                error_message: None,
+            }),
+        ));
     }
 
     Ok(())
@@ -351,7 +408,13 @@ pub async fn change_object_image(
         )
         .await?;
     } else {
-        return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
+        return Err(ApiError::WithResponse(
+            StatusCode::NOT_FOUND,
+            Json(ErrorInfo {
+                error_code: ErrorCode::DosentExist,
+                error_message: None,
+            }),
+        ));
     }
 
     Ok(())
@@ -445,7 +508,7 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
         }
         chunk.resize(total_read_size, 0);
 
-        if chunk.len() == 0 {
+        if chunk.is_empty() {
             break;
         }
 

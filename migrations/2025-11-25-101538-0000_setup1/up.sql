@@ -1,14 +1,22 @@
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
-	"email" TEXT NOT NULL UNIQUE,
+	"email" VARCHAR(128) NOT NULL UNIQUE,
 	"password" BYTEA NOT NULL,
 	"salt" BYTEA NOT NULL,
 	"permisions" BOOLEAN[] NOT NULL,
 	"trust" INTEGER NOT NULL,
-	"verified_email" BOOLEAN NOT NULL,
 	"homeworld" UUID,
 	"avatar" UUID,
+	PRIMARY KEY("id")
+);
+
+CREATE TABLE IF NOT EXISTS "unverified_users" (
+	"id" UUID NOT NULL UNIQUE,
+	"username" VARCHAR(32) NOT NULL UNIQUE,
+	"email" VARCHAR(128) NOT NULL UNIQUE,
+	"password" BYTEA NOT NULL,
+	"salt" BYTEA NOT NULL,
 	PRIMARY KEY("id")
 );
 

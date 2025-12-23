@@ -3,6 +3,7 @@ use crate::AppState;
 use crate::ErrorCode;
 use crate::ErrorInfo;
 use crate::auth::check_auth;
+use crate::email::check_email;
 use crate::hash::hash_password;
 use crate::models::*;
 use crate::schema::tokens::dsl::*;
@@ -53,7 +54,7 @@ impl From<Token> for SignInResponse {
             token_expiry: value
                 .expiry
                 .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap() // probably fine, even if it breaks somehow should just cause a 500
+                .unwrap() // pretty sure we cant even represent < epoch but should be harmless regardless
                 .as_secs(),
             renewable: value.renewable,
         }
@@ -61,14 +62,24 @@ impl From<Token> for SignInResponse {
 }
 
 pub async fn sign_in(
-    state: State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(json): Json<SignInRequest>,
 ) -> Result<Json<SignInResponse>, ApiError> {
-    // since we reject incorrect emails before hashing the password
-    // an attacker could use the difference in response time to find valid emails.
-    // to avoid this we wait a specified time
-    // that should be longer than the time spent hashing to hide the difference
+    // since we reject incorrect emails before hashing the password an attacker could use the difference in response time to find valid emails.
+    // to avoid this we wait a specified time that should be longer than the time spent hashing to hide the difference
     const TIMING_ATTACK_PROTECTION: Duration = Duration::from_secs(0);
+    // starting from where the email is checked and ending once the password is confirmed to be correct
+    // there should be no early returns, to avoid any risk of exposing timing information. this means no '?' or .unwrap()
+
+    if !check_email(&json.email) || json.email.len() > 128 {
+        return Err(ApiError::WithResponse(
+            StatusCode::BAD_REQUEST,
+            Json(ErrorInfo {
+                error_code: ErrorCode::InvalidRequest,
+                error_message: Some(String::from("Invalid email. This shouldnt happen")),
+            }),
+        ));
+    }
 
     let t1 = Instant::now();
     let mut conn = state.pool.get().await?;
@@ -76,6 +87,7 @@ pub async fn sign_in(
 
     conn.transaction(|mut conn| {
         async move {
+    // start of 'critial' section (see top of function)
     if let Ok(u) = users
         .select(User::as_select())
         .filter(email.eq(&json.email))
@@ -90,6 +102,8 @@ pub async fn sign_in(
         .await;
 
         if password_hash.unwrap_or_default() == u.password {
+            // end of 'critial' section (see top of function)
+            // if this code block isnt reached, critical section lasts until the end of the function
             let mut t = vec![0; 64];
 
             rand_core::OsRng.try_fill_bytes(&mut t)?;
@@ -122,13 +136,13 @@ pub async fn sign_in(
     }
     let elapsed = Instant::now().duration_since(t1);
     sleep(TIMING_ATTACK_PROTECTION.saturating_sub(elapsed)).await;
-    return Err(ApiError::WithResponse(
+    Err(ApiError::WithResponse(
         StatusCode::BAD_REQUEST,
         Json(ErrorInfo {
-            error_code: ErrorCode::UserDosentExist,
+            error_code: ErrorCode::DosentExist,
             error_message: Some(String::from("Invalid email or password.")),
         }),
-    ));}
+    ))}
     .scope_boxed()
 })
 .await
@@ -155,7 +169,7 @@ pub async fn renew(
         .execute(&mut conn)
         .await?;
 
-    return Ok(Json(token_value.into()));
+    Ok(Json(token_value.into()))
 }
 
 pub async fn verify() -> StatusCode {
@@ -174,15 +188,15 @@ pub async fn get_user(
         .get_result(&mut conn)
         .await
     {
-        return Ok(Json(u));
+        Ok(Json(u))
     } else {
-        return Err(ApiError::WithResponse(
-            StatusCode::BAD_REQUEST,
+        Err(ApiError::WithResponse(
+            StatusCode::NOT_FOUND,
             Json(ErrorInfo {
-                error_code: ErrorCode::UserDosentExist,
+                error_code: ErrorCode::DosentExist,
                 error_message: None,
             }),
-        ));
+        ))
     }
 }
 

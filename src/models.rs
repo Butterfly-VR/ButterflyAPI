@@ -32,7 +32,7 @@ pub struct Object {
     pub encryption_iv: Vec<u8>,
 }
 
-#[derive(Queryable, Selectable, Insertable)]
+#[derive(Queryable, Selectable, Insertable, Serialize)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
     pub id: Uuid,
@@ -40,12 +40,22 @@ pub struct User {
     pub password: Vec<u8>,
     pub salt: Vec<u8>,
     pub email: String,
-    pub verified_email: bool,
     pub permisions: Vec<Option<bool>>,
     pub trust: i32,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
 }
+
+#[derive(Queryable, Selectable, Insertable, Serialize)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct UnverifiedUser {
+    pub id: Uuid,
+    pub username: String,
+    pub password: Vec<u8>,
+    pub salt: Vec<u8>,
+    pub email: String,
+}
+
 #[derive(Serialize, Queryable, Selectable, Debug)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -54,6 +64,17 @@ pub struct PublicUser {
     pub username: String,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
+}
+
+impl From<User> for PublicUser {
+    fn from(value: User) -> Self {
+        PublicUser {
+            id: value.id,
+            username: value.username,
+            homeworld: value.homeworld,
+            avatar: value.avatar,
+        }
+    }
 }
 
 #[derive(Queryable, Selectable, Insertable)]

@@ -16,6 +16,7 @@ use std::{env, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use tower_http::trace::TraceLayer;
 mod auth;
+mod email;
 mod hash;
 pub mod models;
 mod objects;
@@ -38,9 +39,11 @@ const HASHER_MEMORY_BLOCKS: usize = 1;
 
 #[derive(Serialize)]
 enum ErrorCode {
-    UserAlreadyExists,
-    UserDosentExist,
+    AlreadyExists,
+    DosentExist,
     InsufficientPermissions,
+    BadRequestLength,
+    InvalidRequest,
 }
 
 enum ApiError {

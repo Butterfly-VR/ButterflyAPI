@@ -1,7 +1,5 @@
 use crate::AppState;
 use argon2::Argon2;
-use axum;
-use axum::extract::State;
 use std::sync::Arc;
 use tokio::task::spawn_blocking;
 use tracing::{info, warn};
@@ -23,7 +21,7 @@ static HASHER_PARAMETERS: Result<argon2::Params, argon2::Error> = argon2::Params
 );
 
 pub async fn hash_password(
-    state: State<Arc<AppState>>,
+    state: Arc<AppState>,
     pwd: [u8; 64],
     slt: [u8; 64],
 ) -> Result<Vec<u8>, ()> {
@@ -37,7 +35,9 @@ pub async fn hash_password(
         }
 
         if block.is_none() {
-            info!("hasher failed to find block");
+            info!(
+                "hasher failed to find block, this is expected if too many users sign up/in at once"
+            );
             return Err(());
         }
         let mut block = block.unwrap();
