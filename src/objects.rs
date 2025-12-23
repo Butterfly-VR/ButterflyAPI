@@ -363,8 +363,37 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     key: &str,
     stream: &mut S,
 ) -> Result<(), ApiError> {
-    // 1MB
-    const CHUNK_SIZE: usize = 1024 * 1024;
+    // 10MB
+    const CHUNK_SIZE: usize = 10 * 1024 * 1024;
+    const MAX_PUT_SIZE: usize = CHUNK_SIZE * 2;
+
+    // dont bother with multipart if smaller than MAX_PUT_SIZE
+    let mut first_chunk = vec![0u8; MAX_PUT_SIZE];
+
+    let mut total_read_size: usize = 0;
+    loop {
+        let read_size: usize = stream.read(&mut first_chunk[total_read_size..]).await?;
+        if read_size == 0 {
+            break;
+        }
+        total_read_size += read_size;
+
+        if total_read_size == MAX_PUT_SIZE {
+            break;
+        }
+    }
+    first_chunk.resize(total_read_size, 0);
+
+    if first_chunk.len() < MAX_PUT_SIZE {
+        client
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from(first_chunk))
+            .send()
+            .await?;
+        return Ok(());
+    }
 
     let multipart_upload = client
         .create_multipart_upload()
@@ -378,10 +407,43 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
 
     let mut parts: Vec<aws_sdk_s3::types::CompletedPart> = vec![];
 
+    for chunk in first_chunk.chunks_exact(CHUNK_SIZE) {
+        let part_number = parts.len() as i32 + 1;
+
+        let part = client
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .part_number(part_number)
+            .upload_id(&upload_id)
+            .body(ByteStream::from(chunk.to_owned()))
+            .send()
+            .await?;
+        let part = aws_sdk_s3::types::CompletedPart::builder()
+            .e_tag(
+                part.e_tag()
+                    .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?,
+            )
+            .part_number(part_number)
+            .build();
+        parts.push(part);
+    }
+
     loop {
         let mut chunk = vec![0u8; CHUNK_SIZE];
-        let read_size: usize = stream.read(&mut chunk).await?;
-        chunk.resize(read_size, 0);
+        let mut total_read_size: usize = 0;
+        loop {
+            let read_size: usize = stream.read(&mut chunk[total_read_size..]).await?;
+            if read_size == 0 {
+                break;
+            }
+            total_read_size += read_size;
+            debug_assert!(total_read_size <= MAX_PUT_SIZE);
+            if total_read_size == MAX_PUT_SIZE {
+                break;
+            }
+        }
+        chunk.resize(total_read_size, 0);
 
         if chunk.len() == 0 {
             break;
@@ -411,14 +473,25 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     let completed_multipart_upload = aws_sdk_s3::types::CompletedMultipartUpload::builder()
         .set_parts(Some(parts))
         .build();
-    client
+    if client
         .complete_multipart_upload()
         .bucket(bucket)
         .key(key)
         .upload_id(&upload_id)
         .multipart_upload(completed_multipart_upload)
         .send()
-        .await?;
+        .await
+        .is_err()
+    {
+        client
+            .abort_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .send()
+            .await?;
+        return Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR));
+    }
 
     Ok(())
 }
