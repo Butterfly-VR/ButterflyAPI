@@ -179,11 +179,11 @@ pub async fn verify() -> StatusCode {
 pub async fn get_user(
     State(state): State<Arc<AppState>>,
     user_id: Extension<Uuid>,
-) -> Result<Json<PublicUser>, ApiError> {
+) -> Result<Json<PublicUserInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
 
     if let Ok(u) = users
-        .select(PublicUser::as_select())
+        .select(PublicUserInfo::as_select())
         .filter(id.eq(user_id.0))
         .get_result(&mut conn)
         .await

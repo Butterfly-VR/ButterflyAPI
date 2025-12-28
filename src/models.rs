@@ -61,16 +61,26 @@ pub struct UnverifiedUser {
 #[derive(Serialize, Queryable, Selectable, Debug)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct PublicUser {
+pub struct PublicUserInfo {
     pub id: Uuid,
     pub username: String,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
 }
 
-impl From<User> for PublicUser {
+#[derive(Serialize, Queryable, Selectable, Debug)]
+#[diesel(table_name = users)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct UserInfo {
+    pub id: Uuid,
+    pub username: String,
+    pub homeworld: Option<Uuid>,
+    pub avatar: Option<Uuid>,
+}
+
+impl From<User> for PublicUserInfo {
     fn from(value: User) -> Self {
-        PublicUser {
+        PublicUserInfo {
             id: value.id,
             username: value.username,
             homeworld: value.homeworld,

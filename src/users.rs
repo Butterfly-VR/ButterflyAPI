@@ -16,6 +16,7 @@ use axum::extract::State;
 use axum::http;
 use axum::http::StatusCode;
 use axum::middleware;
+use axum::response::IntoResponse;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::insert_into;
 use diesel::prelude::*;
@@ -23,7 +24,6 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
 use rand_core::TryRngCore;
 use serde::Deserialize;
-use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::SystemTime;
@@ -145,22 +145,28 @@ pub async fn sign_up(
     .await
 }
 
-#[derive(Serialize)]
 pub enum GetUserResult {
-    PublicUser(PublicUser),
-    #[allow(dead_code)]
-    FriendUser(()), // todo after friends implemented
-    User(User),
+    PublicUser(Json<PublicUserInfo>),
+    User(Json<User>),
+}
+
+impl IntoResponse for GetUserResult {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            GetUserResult::PublicUser(user) => user.into_response(),
+            GetUserResult::User(user) => user.into_response(),
+        }
+    }
 }
 
 pub async fn get_user(
     State(state): State<Arc<AppState>>,
     Path(usr_id): Path<Uuid>,
     Extension(user_id): Extension<Uuid>,
-) -> Result<Json<GetUserResult>, ApiError> {
+) -> Result<GetUserResult, ApiError> {
     let mut conn = state.pool.get().await?;
 
-    if let Ok(Some(user)) = users::table
+    if let Ok(Some(mut user)) = users::table
         .select(User::as_select())
         .filter(users::id.eq(usr_id))
         .first(&mut conn)
@@ -168,9 +174,12 @@ pub async fn get_user(
         .optional()
     {
         if user_id == user.id {
-            return Ok(Json(GetUserResult::User(user)));
+            // todo: this is kinda jank
+            user.homeworld = Some(user.homeworld.unwrap_or(Uuid::nil()));
+            user.avatar = Some(user.avatar.unwrap_or(Uuid::nil()));
+            return Ok(GetUserResult::User(Json(user)));
         } else {
-            return Ok(Json(GetUserResult::PublicUser(user.into())));
+            return Ok(GetUserResult::PublicUser(Json(user.into())));
         }
     }
     Err(ApiError::WithResponse(

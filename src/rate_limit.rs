@@ -72,7 +72,9 @@ async fn check_limit_inner(
     Ok(next.run(req).await)
 }
 
-pub async fn rate_limit_basic(
+// if none of the functions below are a good fit for an endpoint add another one with a generic name
+
+pub async fn rate_limit_base(
     State(state): State<Arc<AppState>>,
     req: Request<Body>,
     next: Next,
