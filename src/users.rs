@@ -108,7 +108,8 @@ pub async fn sign_up(
                     &json.email,
                     json.username.clone(),
                     EmailType::EmailVerify(token, id),
-                )?;
+                )
+                .await?;
 
                 // delete any previous sign up attempts
                 diesel::delete(unverified_users::table)
@@ -118,7 +119,7 @@ pub async fn sign_up(
                     .await?;
 
                 let new_user: UnverifiedUser = UnverifiedUser {
-                    id: id,
+                    id,
                     username: json.username,
                     password: password_hash,
                     salt: Vec::from(password_salt),
@@ -128,7 +129,7 @@ pub async fn sign_up(
                 };
 
                 insert_into(unverified_users::table)
-                    .values::<UnverifiedUser>(new_user.into())
+                    .values::<UnverifiedUser>(new_user)
                     .execute(&mut conn)
                     .await?;
                 Ok(())
@@ -236,9 +237,9 @@ pub async fn verify_email(
                         .filter(unverified_users::id.eq(usr_id))
                         .execute(&mut conn)
                         .await?;
-                    return Ok(());
+                    Ok(())
                 } else {
-                    return Err(ApiError::WithResponse(
+                    Err(ApiError::WithResponse(
                         StatusCode::BAD_REQUEST,
                         Json(ErrorInfo {
                             error_code: ErrorCode::InvalidRequest,
@@ -246,32 +247,30 @@ pub async fn verify_email(
                                 "Token was expired or invalid. Try signing up again.".to_owned(),
                             ),
                         }),
-                    ));
+                    ))
                 }
+            } else if users::table
+                .count()
+                .filter(users::id.eq(usr_id))
+                .get_result::<i64>(&mut conn)
+                .await?
+                != 0
+            {
+                Err(ApiError::WithResponse(
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorInfo {
+                        error_code: ErrorCode::InvalidRequest,
+                        error_message: Some("User is already verified".to_owned()),
+                    }),
+                ))
             } else {
-                if users::table
-                    .count()
-                    .filter(users::id.eq(usr_id))
-                    .get_result::<i64>(&mut conn)
-                    .await?
-                    != 0
-                {
-                    return Err(ApiError::WithResponse(
-                        StatusCode::BAD_REQUEST,
-                        Json(ErrorInfo {
-                            error_code: ErrorCode::InvalidRequest,
-                            error_message: Some("User is already verified".to_owned()),
-                        }),
-                    ));
-                } else {
-                    return Err(ApiError::WithResponse(
-                        StatusCode::NOT_FOUND,
-                        Json(ErrorInfo {
-                            error_code: ErrorCode::DosentExist,
-                            error_message: None,
-                        }),
-                    ));
-                }
+                Err(ApiError::WithResponse(
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorInfo {
+                        error_code: ErrorCode::DosentExist,
+                        error_message: None,
+                    }),
+                ))
             }
         }
         .scope_boxed()

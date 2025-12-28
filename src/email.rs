@@ -5,6 +5,7 @@ use lettre::{
     transport::smtp::authentication::Credentials,
 };
 use std::env;
+use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
 pub enum EmailType {
@@ -46,7 +47,11 @@ pub fn check_email(email: &str) -> bool {
     true
 }
 
-pub fn send_email(email: &str, username: String, email_type: EmailType) -> Result<(), ApiError> {
+pub async fn send_email(
+    email: &str,
+    username: String,
+    email_type: EmailType,
+) -> Result<(), ApiError> {
     let email_first_part = MessageBuilder::new()
         .to(Mailbox {
             name: None, //Some(username.clone()),
@@ -57,13 +62,11 @@ pub fn send_email(email: &str, username: String, email_type: EmailType) -> Resul
             email: Address::new("support", "butterflyvr.net")?,
         });
 
-    let email: Message;
-
-    match email_type {
-        EmailType::EmailVerify(token, user_id) => {
-            email = email_first_part
-                .subject("Verify your email for ButterflyVR")
-                .body(format!("Dear {},
+    let email: Message = match email_type {
+        EmailType::EmailVerify(token, user_id) => email_first_part
+            .subject("Verify your email for ButterflyVR")
+            .body(format!(
+                "Dear {},
 
                 Thank you for registering with ButterflyVR. To complete your account setup, please verify your email address by clicking the link below:
 
@@ -75,17 +78,26 @@ pub fn send_email(email: &str, username: String, email_type: EmailType) -> Resul
 
                 Best regards,
                 The ButterflyVR Team
-", username, format!("https://butterflyvr.net/api/v0/user/{}/verify/{}", user_id, hex::encode(token))))?;
-        }
-    }
+                ",
+                username,
+                format_args!(
+                    "https://butterflyvr.net/api/v0/user/{}/verify/{}",
+                    user_id,
+                    hex::encode(token)
+                )
+            ))?,
+    };
 
-    let mailer = SmtpTransport::starttls_relay("smtp.protonmail.ch")
-        .unwrap()
-        .credentials(Credentials::new(
-            env::var("PROTONMAIL_EMAIL").expect("PROTONMAIL_EMAIL must be set"),
-            env::var("PROTONMAIL_TOKEN").expect("PROTONMAIL_TOKEN must be set"),
-        ))
-        .build();
-    mailer.send(&email)?;
+    spawn_blocking(move || {
+        let mailer = SmtpTransport::starttls_relay("smtp.protonmail.ch")
+            .unwrap()
+            .credentials(Credentials::new(
+                env::var("MAIL_EMAIL").expect("MAIL_EMAIL must be set"),
+                env::var("MAIL_TOKEN").expect("MAIL_TOKEN must be set"),
+            ))
+            .build();
+        mailer.send(&email)
+    })
+    .await??;
     Ok(())
 }
