@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS "unverified_users" (
 	"email" VARCHAR(128) NOT NULL UNIQUE,
 	"password" BYTEA NOT NULL,
 	"salt" BYTEA NOT NULL,
+	"token" BYTEA NOT NULL,
+	"expiry" TIMESTAMP NOT NULL,
 	PRIMARY KEY("id")
 );
 

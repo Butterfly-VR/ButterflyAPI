@@ -56,6 +56,8 @@ diesel::table! {
         email -> Varchar,
         password -> Bytea,
         salt -> Bytea,
+        token -> Bytea,
+        expiry -> Timestamp,
     }
 }
 

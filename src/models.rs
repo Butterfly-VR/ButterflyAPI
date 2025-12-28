@@ -54,6 +54,8 @@ pub struct UnverifiedUser {
     pub password: Vec<u8>,
     pub salt: Vec<u8>,
     pub email: String,
+    pub token: Vec<u8>,
+    pub expiry: SystemTime,
 }
 
 #[derive(Serialize, Queryable, Selectable, Debug)]

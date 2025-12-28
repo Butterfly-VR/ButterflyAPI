@@ -14,3 +14,4 @@ DROP TABLE "objects";
 DROP TABLE "licenses";
 DROP TABLE "tokens";
 DROP TABLE "users";
+DROP TABLE "unverified_users";
