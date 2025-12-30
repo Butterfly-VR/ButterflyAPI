@@ -112,6 +112,9 @@ pub async fn create_or_update_object(
                 new_object.name = json.name;
                 new_object.description = json.description;
                 new_object.publicity = json.publicity;
+                new_object.flags = json.flags.into_iter().map(Some).collect();
+                new_object.encryption_key = json.encryption_key;
+                new_object.encryption_iv = json.encryption_iv;
 
                 new_object.updated_at = SystemTime::now();
 
