@@ -177,7 +177,7 @@ pub async fn get_user(
         if user_id == user.id {
             // todo: this is kinda jank
             user.homeworld = Some(user.homeworld.unwrap_or(Uuid::nil()));
-            user.avatar = Some(user.avatar.unwrap_or(Uuid::nil()));
+            user.avatar = Some(user.avatar.unwrap_or(Uuid::from_u64_pair(0, 1))); // yeah thats not hacky at all
             return Ok(GetUserResult::User(Json(user)));
         } else {
             return Ok(GetUserResult::PublicUser(Json(user.into())));

@@ -9,7 +9,7 @@ use axum::{
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use schema::tokens::dsl::*;
-use std::sync::Arc;
+use std::{sync::Arc, time::SystemTime};
 use uuid::Uuid;
 
 use crate::schema;
@@ -33,6 +33,7 @@ pub async fn check_auth(
     if let Ok(Some(user_id)) = tokens
         .select(user)
         .filter(token.eq(header_token))
+        .filter(expiry.gt(SystemTime::now()))
         .first::<Uuid>(&mut conn)
         .await
         .optional()

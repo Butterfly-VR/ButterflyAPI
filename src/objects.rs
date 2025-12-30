@@ -25,8 +25,10 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 
 use futures_util::TryStreamExt;
 use serde::Deserialize;
+use serde::Serialize;
 use std::sync::Arc;
 use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
@@ -223,27 +225,82 @@ pub async fn create_or_update_object(
     .await
 }
 
+#[derive(Serialize)]
+pub struct ObjectInfo {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub flags: Vec<bool>,
+    pub updated_at: u64,
+    pub created_at: u64,
+    pub object_size: i64,
+    pub image_size: i64,
+    pub creator: Uuid,
+    pub object_type: i16,
+    pub publicity: i16,
+    pub license: i32,
+    pub encryption_key: Vec<u8>,
+    pub encryption_iv: Vec<u8>,
+    pub tags: Vec<String>,
+}
+
 pub async fn get_object_info(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
-) -> Result<Json<models::Object>, ApiError> {
+) -> Result<Json<ObjectInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
 
-    objects::table
+    if let Some(object) = objects::table
         .select(Object::as_select())
         .filter(objects::id.eq(&object_id))
         .filter(objects::object_type.eq(object_type as i16))
-        .first(&mut conn)
+        .first::<Object>(&mut conn)
         .await
         .optional()?
-        .map(Json)
-        .ok_or(ApiError::WithResponse(
+    {
+        let tags = tags::table
+            .select(tags::tag)
+            .filter(tags::object.eq(object.id))
+            .load(&mut conn)
+            .await?;
+        Ok(Json(ObjectInfo {
+            id: object.id,
+            name: object.name,
+            description: object.description,
+            flags: object
+                .flags
+                .iter()
+                .map(|x| if let Some(x) = x { *x } else { false })
+                .collect::<Vec<bool>>(),
+            updated_at: object
+                .updated_at
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            created_at: object
+                .created_at
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            object_size: object.object_size,
+            image_size: object.image_size,
+            creator: object.creator,
+            object_type: object.object_type,
+            publicity: object.publicity,
+            license: object.license,
+            encryption_iv: object.encryption_iv,
+            encryption_key: object.encryption_key,
+            tags,
+        }))
+    } else {
+        Err(ApiError::WithResponse(
             StatusCode::NOT_FOUND,
             Json(ErrorInfo {
                 error_code: ErrorCode::DosentExist,
                 error_message: None,
             }),
         ))
+    }
 }
 
 pub async fn get_object_file(
@@ -320,6 +377,23 @@ pub async fn change_object_file(
             })),
         )
         .await?;
+
+        diesel::update(objects::table)
+            .filter(objects::id.eq(&object_id))
+            .filter(objects::object_type.eq(object_type as i16))
+            .set(
+                objects::object_size.eq(state
+                    .s3_client
+                    .head_object()
+                    .bucket(enum_str)
+                    .key(&object_id.to_string())
+                    .send()
+                    .await?
+                    .content_length()
+                    .unwrap_or_default()),
+            )
+            .execute(&mut conn)
+            .await?;
     } else {
         return Err(ApiError::WithResponse(
             StatusCode::NOT_FOUND,
@@ -407,6 +481,23 @@ pub async fn change_object_image(
             })),
         )
         .await?;
+
+        diesel::update(objects::table)
+            .filter(objects::id.eq(&object_id))
+            .filter(objects::object_type.eq(object_type as i16))
+            .set(
+                objects::object_size.eq(state
+                    .s3_client
+                    .head_object()
+                    .bucket(&(enum_str.to_owned() + "-images"))
+                    .key(&object_id.to_string())
+                    .send()
+                    .await?
+                    .content_length()
+                    .unwrap_or_default()),
+            )
+            .execute(&mut conn)
+            .await?;
     } else {
         return Err(ApiError::WithResponse(
             StatusCode::NOT_FOUND,

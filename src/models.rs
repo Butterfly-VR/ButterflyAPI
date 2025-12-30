@@ -22,8 +22,8 @@ pub struct Object {
     pub updated_at: SystemTime,
     pub created_at: SystemTime,
     pub verified: bool,
-    pub object_size: i32,
-    pub image_size: i32,
+    pub object_size: i64,
+    pub image_size: i64,
     pub creator: Uuid,
     pub object_type: i16,
     pub publicity: i16,
@@ -62,16 +62,6 @@ pub struct UnverifiedUser {
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct PublicUserInfo {
-    pub id: Uuid,
-    pub username: String,
-    pub homeworld: Option<Uuid>,
-    pub avatar: Option<Uuid>,
-}
-
-#[derive(Serialize, Queryable, Selectable, Debug)]
-#[diesel(table_name = users)]
-#[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct UserInfo {
     pub id: Uuid,
     pub username: String,
     pub homeworld: Option<Uuid>,
