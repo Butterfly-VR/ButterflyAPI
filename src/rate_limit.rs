@@ -11,13 +11,15 @@ use std::{collections::VecDeque, net::SocketAddr, time::SystemTime};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
-async fn check_limit_inner(
+// global rate limit, heavy endpoints should use a different limit function.
+pub async fn rate_limit<
+    const MINUTE_LIMIT: usize,
+    const HOUR_LIMIT: usize,
+    const DAY_LIMIT: usize,
+>(
     State(state): State<Arc<AppState>>,
     mut req: Request<Body>,
     next: Next,
-    minute_limit: usize,
-    hour_limit: usize,
-    day_limit: usize,
 ) -> Result<Response, StatusCode> {
     let addr = req
         .extract_parts::<ConnectInfo<SocketAddr>>()
@@ -54,13 +56,13 @@ async fn check_limit_inner(
             requests_last_day += 1;
         }
 
-        if requests_last_minute > minute_limit {
+        if requests_last_minute > MINUTE_LIMIT {
             return Err(StatusCode::TOO_MANY_REQUESTS);
         }
-        if requests_last_hour > hour_limit {
+        if requests_last_hour > HOUR_LIMIT {
             return Err(StatusCode::TOO_MANY_REQUESTS);
         }
-        if requests_last_day > day_limit {
+        if requests_last_day > DAY_LIMIT {
             return Err(StatusCode::TOO_MANY_REQUESTS);
         }
     } else {
@@ -70,27 +72,4 @@ async fn check_limit_inner(
         );
     }
     Ok(next.run(req).await)
-}
-
-// if none of the functions below are a good fit for an endpoint add another one with a generic name
-
-pub async fn rate_limit_base(
-    State(state): State<Arc<AppState>>,
-    req: Request<Body>,
-    next: Next,
-) -> Result<Response, StatusCode> {
-    // some abritary initial limits
-    // 2 req per sec for a minute, half that for an hour, quater that for a day
-    const MINUTE_RATE_LIMIT: usize = 120;
-    const HOUR_RATE_LIMIT: usize = MINUTE_RATE_LIMIT * 30;
-    const DAY_RATE_LIMIT: usize = HOUR_RATE_LIMIT * 12;
-    check_limit_inner(
-        State(state),
-        req,
-        next,
-        MINUTE_RATE_LIMIT,
-        HOUR_RATE_LIMIT,
-        DAY_RATE_LIMIT,
-    )
-    .await
 }

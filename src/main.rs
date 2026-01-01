@@ -114,7 +114,7 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
-            rate_limit::rate_limit_base,
+            rate_limit::rate_limit::<60, 720, 7200>,
         ));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:23888")
