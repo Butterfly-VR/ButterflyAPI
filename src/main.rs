@@ -18,11 +18,17 @@ use tower_http::trace::TraceLayer;
 mod auth;
 mod email;
 mod hash;
+mod instances;
+mod search;
+// will finish later
+//mod instance_websocket;
 pub mod models;
 mod objects;
 mod rate_limit;
 pub mod schema;
 mod tokens;
+// will finish later
+//mod user_websocket;
 mod users;
 use std::net::SocketAddr;
 
