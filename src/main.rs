@@ -18,7 +18,7 @@ use tower_http::trace::TraceLayer;
 mod auth;
 mod email;
 mod hash;
-mod instances;
+//mod instances;
 mod search;
 // will finish later
 //mod instance_websocket;
@@ -117,6 +117,7 @@ async fn main() {
         .nest(ROUTE_ORIGIN, users::users_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, tokens::tokens_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, objects::objects_router(app_state.clone()))
+        .nest(ROUTE_ORIGIN, search::search_router(app_state.clone()))
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),

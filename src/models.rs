@@ -14,6 +14,7 @@ pub enum ObjectType {
 
 #[derive(Queryable, Identifiable, Serialize, Selectable, Insertable, Debug, Clone, AsChangeset)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(belongs_to(User))]
 pub struct Object {
     pub id: Uuid,
     pub name: String,
@@ -81,6 +82,7 @@ impl From<User> for PublicUserInfo {
 
 #[derive(Queryable, Selectable, Insertable)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(belongs_to(User))]
 pub struct Token {
     pub user: Uuid,
     pub token: Vec<u8>,
@@ -90,6 +92,7 @@ pub struct Token {
 
 #[derive(Queryable, Selectable, Insertable)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(belongs_to(Object))]
 pub struct License {
     license: i32,
     text: String,
@@ -97,6 +100,7 @@ pub struct License {
 
 #[derive(Queryable, Selectable, Insertable)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(belongs_to(Object))]
 pub struct Tag {
     object: Uuid,
     tag: String,
