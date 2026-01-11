@@ -1,6 +1,8 @@
 use crate::ApiError;
 use crate::AppState;
 use crate::auth;
+use crate::models::Object;
+use crate::models::User;
 use crate::schema::objects;
 use crate::schema::tags;
 use crate::schema::users;
@@ -22,17 +24,18 @@ const SEARCH_ROUTE: &str = "/search/{query}";
 #[derive(Serialize)]
 pub struct SearchResult {
     #[serde(skip_serializing_if = "Option::is_none")]
-    users: Option<Vec<(Uuid, String)>>,
+    users: Option<Vec<User>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    worlds: Option<Vec<(Uuid, String)>>,
+    worlds: Option<Vec<Object>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatars: Option<Vec<(Uuid, String)>>,
+    avatars: Option<Vec<Object>>,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum FilterObjectTypes {
-    User,
     World,
     Avatar,
+    User,
 }
 
 pub enum SortTypes {
@@ -87,7 +90,10 @@ pub async fn search(
     State(app_state): State<Arc<AppState>>,
     Path(query): Path<String>,
 ) -> Result<Json<SearchResult>, ApiError> {
+    // todo: i wrote this like a hashmap could have duplicate keys for some reason, need to clean up
     // split query to search term and filters
+
+    dbg!(&query);
     let (term, filters) = query
         .split_once('&')
         .ok_or(ApiError::WithCode(StatusCode::BAD_REQUEST))?;
@@ -103,104 +109,92 @@ pub async fn search(
 
     let filters = parse_filters(filters);
 
-    let mut search_users = false;
-    let mut search_worlds = false;
-    let mut search_avatars = false;
-
-    for filter in filters.iter() {
-        match filter {
-            Filter::Is(FilterObjectTypes::User) => search_users = true,
-            Filter::Is(FilterObjectTypes::World) => search_worlds = true,
-            Filter::Is(FilterObjectTypes::Avatar) => search_avatars = true,
-            _ => {}
-        }
-    }
-
-    if !search_users && !search_worlds && !search_avatars {
-        search_users = true;
-        search_worlds = true;
-        search_avatars = true;
-    }
-
     let mut search_result = SearchResult {
         users: None,
         worlds: None,
         avatars: None,
     };
 
-    if search_users {
-        search_result.users =
-            Some(perform_search(FilterObjectTypes::User, &filters, term, &mut conn).await);
-    }
-
-    if search_worlds {
-        search_result.worlds =
-            Some(perform_search(FilterObjectTypes::World, &filters, term, &mut conn).await);
-    }
-
-    if search_avatars {
-        search_result.avatars =
-            Some(perform_search(FilterObjectTypes::Avatar, &filters, term, &mut conn).await);
+    for filter in filters.iter() {
+        match filter {
+            Filter::Is(FilterObjectTypes::User) => {
+                search_result.users = Some(search_users(&filters, term, &mut conn).await)
+            }
+            Filter::Is(FilterObjectTypes::World) => {
+                search_result.worlds =
+                    Some(search_objects(FilterObjectTypes::World, &filters, term, &mut conn).await)
+            }
+            Filter::Is(FilterObjectTypes::Avatar) => {
+                search_result.avatars =
+                    Some(search_objects(FilterObjectTypes::Avatar, &filters, term, &mut conn).await)
+            }
+            _ => {}
+        }
     }
 
     Ok(Json(search_result))
 }
 
-pub async fn perform_search(
-    target: FilterObjectTypes,
+pub async fn search_objects(
     filters: &[Filter],
     search_term: &str,
     conn: &mut AsyncPgConnection,
-) -> Vec<(Uuid, String)> {
-    match target {
-        FilterObjectTypes::User => {
-            let mut query = users::table
-                .select((users::id, users::username))
-                .filter(users::username.like(format!("%{}%", search_term)))
-                .into_boxed();
-            for filter in filters {
-                match filter {
-                    Filter::SortBy(sort_type) => match sort_type {
-                        SortTypes::Name => {
-                            query = query.order(users::username.asc());
-                        }
-                        _ => {}
-                    },
-                    _ => {}
-                }
+) -> Vec<Object> {
+    let mut query = objects::table
+        .select((objects::id, objects::name))
+        .filter(objects::name.like(format!("%{}%", search_term)))
+        .or_filter(objects::description.like(format!("%{}%", search_term)))
+        .left_join(tags::table)
+        .or_filter(tags::tag.eq(search_term))
+        .left_join(users::table.on(users::id.eq(objects::creator)))
+        .or_filter(users::username.like(format!("%{}%", search_term)))
+        .limit(500)
+        .into_boxed();
+    for filter in filters {
+        match filter {
+            Filter::Is(object_type) => {
+                query = query.filter(objects::object_type.eq(*object_type as i16));
             }
-            query.load::<(Uuid, String)>(conn).await.unwrap()
-        }
-        _ => {
-            let mut query = objects::table
-                .select((objects::id, objects::name))
-                .filter(objects::name.like(format!("%{}%", search_term)))
-                .or_filter(objects::description.like(format!("%{}%", search_term)))
-                .left_join(tags::table)
-                .or_filter(tags::tag.eq(search_term))
-                .left_join(users::table.on(users::id.eq(objects::creator)))
-                .or_filter(users::username.like(format!("%{}%", search_term)))
-                .into_boxed();
-            for filter in filters {
-                match filter {
-                    Filter::Owner(owner) => {
-                        query = query.filter(users::id.eq(owner));
-                    }
-                    Filter::SortBy(sort_type) => match sort_type {
-                        SortTypes::Name => {
-                            query = query.order(objects::name.asc());
-                        }
-                        SortTypes::CreatedAt => {
-                            query = query.order(objects::created_at.desc());
-                        }
-                        _ => {}
-                    },
-                    _ => {}
-                }
+            Filter::Owner(owner) => {
+                query = query.filter(users::id.eq(owner));
             }
-            query.load::<(Uuid, String)>(conn).await.unwrap()
+            Filter::SortBy(sort_type) => match sort_type {
+                SortTypes::Name => {
+                    query = query.order(objects::name.asc());
+                }
+                SortTypes::CreatedAt => {
+                    query = query.order(objects::created_at.desc());
+                }
+                _ => {}
+            },
+            _ => {}
         }
     }
+    query.load::<(Uuid, String)>(conn).await.unwrap()
+}
+
+pub async fn search_users(
+    filters: &[Filter],
+    search_term: &str,
+    conn: &mut AsyncPgConnection,
+) -> Vec<User> {
+    let mut query = users::table
+        .select((users::id, users::username))
+        .filter(users::username.like(format!("%{}%", search_term)))
+        .limit(100)
+        .into_boxed();
+    for filter in filters {
+        match filter {
+            Filter::SortBy(sort_type) => match sort_type {
+                SortTypes::Name => {
+                    query = query.order(users::username.asc());
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    query.load::<(Uuid, String)>(conn).await.unwrap()
 }
 
 pub fn search_router(app_state: Arc<AppState>) -> Router {
