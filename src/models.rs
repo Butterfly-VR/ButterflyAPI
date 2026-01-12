@@ -38,7 +38,9 @@ pub struct Object {
 pub struct User {
     pub id: Uuid,
     pub username: String,
+    #[serde(skip_serializing)]
     pub password: Vec<u8>,
+    #[serde(skip_serializing)]
     pub salt: Vec<u8>,
     pub email: String,
     pub permisions: Vec<Option<bool>>,
@@ -52,7 +54,9 @@ pub struct User {
 pub struct UnverifiedUser {
     pub id: Uuid,
     pub username: String,
+    #[serde(skip_serializing)]
     pub password: Vec<u8>,
+    #[serde(skip_serializing)]
     pub salt: Vec<u8>,
     pub email: String,
     pub token: Vec<u8>,
