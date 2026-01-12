@@ -11,6 +11,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get};
+use diesel::debug_query;
 use diesel::prelude::*;
 use diesel_async::AsyncPgConnection;
 use diesel_async::RunQueryDsl;
@@ -33,9 +34,9 @@ pub struct SearchResult {
 
 #[derive(Debug, Clone, Copy)]
 pub enum FilterObjectTypes {
-    World,
-    Avatar,
-    User,
+    World = 0,
+    Avatar = 1,
+    User = 2,
 }
 
 pub enum SortTypes {
@@ -90,24 +91,25 @@ pub async fn search(
     State(app_state): State<Arc<AppState>>,
     Path(query): Path<String>,
 ) -> Result<Json<SearchResult>, ApiError> {
-    // todo: i wrote this like a hashmap could have duplicate keys for some reason, need to clean up
-    // split query to search term and filters
-
+    // todo: replace unwraps with error handling
     dbg!(&query);
     let (term, filters) = query
         .split_once('&')
         .ok_or(ApiError::WithCode(StatusCode::BAD_REQUEST))?;
 
-    let filters = filters.split(',').collect::<Vec<&str>>();
+    let filters = filters
+        .split(',')
+        .filter(|x| !x.is_empty())
+        .collect::<Vec<&str>>();
 
     let filters: HashMap<&str, &str> = filters
         .into_iter()
-        .map(|x| x.split_once(":").unwrap())
+        .filter_map(|x| x.split_once(":"))
         .collect();
 
-    let mut conn = app_state.pool.get().await?;
-
     let filters = parse_filters(filters);
+
+    let mut conn = app_state.pool.get().await?;
 
     let mut search_result = SearchResult {
         users: None,
@@ -118,15 +120,19 @@ pub async fn search(
     for filter in filters.iter() {
         match filter {
             Filter::Is(FilterObjectTypes::User) => {
-                search_result.users = Some(search_users(&filters, term, &mut conn).await)
+                search_result.users = Some(search_users(&filters, term, &mut conn).await);
+                break;
             }
             Filter::Is(FilterObjectTypes::World) => {
                 search_result.worlds =
-                    Some(search_objects(FilterObjectTypes::World, &filters, term, &mut conn).await)
+                    Some(search_objects(FilterObjectTypes::World, &filters, term, &mut conn).await);
+                break;
             }
             Filter::Is(FilterObjectTypes::Avatar) => {
-                search_result.avatars =
-                    Some(search_objects(FilterObjectTypes::Avatar, &filters, term, &mut conn).await)
+                search_result.avatars = Some(
+                    search_objects(FilterObjectTypes::Avatar, &filters, term, &mut conn).await,
+                );
+                break;
             }
             _ => {}
         }
@@ -136,12 +142,13 @@ pub async fn search(
 }
 
 pub async fn search_objects(
+    object_type: FilterObjectTypes,
     filters: &[Filter],
     search_term: &str,
     conn: &mut AsyncPgConnection,
 ) -> Vec<Object> {
     let mut query = objects::table
-        .select((objects::id, objects::name))
+        .select(Object::as_select())
         .filter(objects::name.like(format!("%{}%", search_term)))
         .or_filter(objects::description.like(format!("%{}%", search_term)))
         .left_join(tags::table)
@@ -150,11 +157,11 @@ pub async fn search_objects(
         .or_filter(users::username.like(format!("%{}%", search_term)))
         .limit(500)
         .into_boxed();
+
+    query = query.filter(objects::object_type.eq(object_type as i16));
+
     for filter in filters {
         match filter {
-            Filter::Is(object_type) => {
-                query = query.filter(objects::object_type.eq(*object_type as i16));
-            }
             Filter::Owner(owner) => {
                 query = query.filter(users::id.eq(owner));
             }
@@ -170,7 +177,7 @@ pub async fn search_objects(
             _ => {}
         }
     }
-    query.load::<(Uuid, String)>(conn).await.unwrap()
+    query.load(conn).await.unwrap()
 }
 
 pub async fn search_users(
@@ -179,7 +186,7 @@ pub async fn search_users(
     conn: &mut AsyncPgConnection,
 ) -> Vec<User> {
     let mut query = users::table
-        .select((users::id, users::username))
+        .select(User::as_select())
         .filter(users::username.like(format!("%{}%", search_term)))
         .limit(100)
         .into_boxed();
@@ -194,7 +201,7 @@ pub async fn search_users(
             _ => {}
         }
     }
-    query.load::<(Uuid, String)>(conn).await.unwrap()
+    query.load(conn).await.unwrap()
 }
 
 pub fn search_router(app_state: Arc<AppState>) -> Router {
