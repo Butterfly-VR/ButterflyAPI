@@ -2,7 +2,7 @@ use crate::ApiError;
 use crate::AppState;
 use crate::auth;
 use crate::models::Object;
-use crate::models::User;
+use crate::models::PublicUserInfo;
 use crate::schema::objects;
 use crate::schema::tags;
 use crate::schema::users;
@@ -11,7 +11,6 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get};
-use diesel::debug_query;
 use diesel::prelude::*;
 use diesel_async::AsyncPgConnection;
 use diesel_async::RunQueryDsl;
@@ -25,7 +24,7 @@ const SEARCH_ROUTE: &str = "/search/{query}";
 #[derive(Serialize)]
 pub struct SearchResult {
     #[serde(skip_serializing_if = "Option::is_none")]
-    users: Option<Vec<User>>,
+    users: Option<Vec<PublicUserInfo>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     worlds: Option<Vec<Object>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -184,9 +183,9 @@ pub async fn search_users(
     filters: &[Filter],
     search_term: &str,
     conn: &mut AsyncPgConnection,
-) -> Vec<User> {
+) -> Vec<PublicUserInfo> {
     let mut query = users::table
-        .select(User::as_select())
+        .select(PublicUserInfo::as_select())
         .filter(users::username.like(format!("%{}%", search_term)))
         .limit(100)
         .into_boxed();
