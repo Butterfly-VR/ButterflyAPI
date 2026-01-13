@@ -489,7 +489,7 @@ pub async fn change_object_image(
             .filter(objects::id.eq(&object_id))
             .filter(objects::object_type.eq(object_type as i16))
             .set(
-                objects::object_size.eq(state
+                objects::image_size.eq(state
                     .s3_client
                     .head_object()
                     .bucket(&(enum_str.to_owned() + "-images"))
