@@ -38,6 +38,7 @@ pub enum FilterObjectTypes {
     User = 2,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum SortTypes {
     Name,
     CreatedAt,
@@ -45,10 +46,11 @@ pub enum SortTypes {
     WeeklyUses,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Filter {
     Invalid,
     Is(FilterObjectTypes),
-    Owner(Uuid),
+    Creator(Uuid),
     SortBy(SortTypes),
 }
 
@@ -64,9 +66,9 @@ fn parse_filters(filters_map: HashMap<&str, &str>) -> Vec<Filter> {
                 _ => filters.push(Filter::Invalid),
             },
 
-            ("owner", id) => {
+            ("creator", id) => {
                 if let Ok(user) = Uuid::parse_str(id) {
-                    filters.push(Filter::Owner(user));
+                    filters.push(Filter::Creator(user));
                 } else {
                     filters.push(Filter::Invalid);
                 }
@@ -105,6 +107,8 @@ pub async fn search(
         .into_iter()
         .filter_map(|x| x.split_once(":"))
         .collect();
+
+    dbg!(&filters);
 
     let filters = parse_filters(filters);
 
@@ -152,16 +156,17 @@ pub async fn search_objects(
         .or_filter(objects::description.like(format!("%{}%", search_term)))
         .left_join(tags::table)
         .or_filter(tags::tag.eq(search_term))
-        .left_join(users::table.on(users::id.eq(objects::creator)))
+        .inner_join(users::table.on(users::id.eq(objects::creator)))
         .or_filter(users::username.like(format!("%{}%", search_term)))
+        .filter(objects::object_type.eq(object_type as i16))
         .limit(500)
         .into_boxed();
 
-    query = query.filter(objects::object_type.eq(object_type as i16));
+    dbg!(&filters);
 
     for filter in filters {
         match filter {
-            Filter::Owner(owner) => {
+            Filter::Creator(owner) => {
                 query = query.filter(users::id.eq(owner));
             }
             Filter::SortBy(sort_type) => match sort_type {
