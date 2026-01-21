@@ -95,7 +95,7 @@ async fn main() {
         .with_max_level(tracing::Level::TRACE)
         .init();
 
-    dotenv().unwrap();
+    let _ = dotenv();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
