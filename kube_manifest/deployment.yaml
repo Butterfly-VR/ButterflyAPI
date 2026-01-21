@@ -6,13 +6,6 @@ metadata:
   labels:
     app: butterfly-api
 spec:
-  initContainers:
-    - name: run-migrations
-      image: butterflyvr/butterfly-api:v0.1.0
-      command: ["diesel", "migration", "run"]
-      envFrom:
-        - secretRef:
-            name: butterfly-api-secrets
   selector:
     matchLabels:
       app: butterfly-api
@@ -26,6 +19,13 @@ spec:
       labels:
         app: butterfly-api
     spec:
+      initContainers:
+        - name: run-migrations
+          image: butterflyvr/butterfly-api:v0.1.0
+          command: ["diesel", "migration", "run"]
+          envFrom:
+            - secretRef:
+                name: butterfly-api-secrets
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
