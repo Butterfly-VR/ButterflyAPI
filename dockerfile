@@ -24,6 +24,8 @@ COPY diesel.toml ./
 # Touch main.rs to ensure it rebuilds with actual code
 RUN touch src/main.rs
 
+RUN cargo install diesel_cli --no-default-features --features postgres
+
 RUN cargo build --release
 
 # Stage 2: Create the runtime image
@@ -42,6 +44,7 @@ COPY --from=builder /app/target/release/ButterflyAPI /app/butterfly-api
 
 # Copy migrations for diesel
 COPY --from=builder /app/migrations /app/migrations
+COPY --from=builder /usr/local/cargo/bin/diesel /usr/local/bin/diesel
 
 RUN chown -R appuser:root /app && chmod -R g=u /app
 
