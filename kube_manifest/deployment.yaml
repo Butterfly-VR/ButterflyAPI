@@ -32,7 +32,7 @@ spec:
         fsGroup: 1001
       containers:
         - name: butterfly-api
-          image: butterfly/butterfly-api:0.1.0
+          image: butterflyvr/butterfly-api:0.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
