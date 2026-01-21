@@ -21,7 +21,7 @@ spec:
     spec:
       initContainers:
         - name: run-migrations
-          image: butterflyvr/butterfly-api:v0.1.0
+          image: butterflyvr/butterflyapi:0.1.0
           command: ["diesel", "migration", "run"]
           envFrom:
             - secretRef:
@@ -32,7 +32,7 @@ spec:
         fsGroup: 1001
       containers:
         - name: butterfly-api
-          image: butterflyvr/butterfly-api:0.1.0
+          image: butterflyvr/butterflyapi:0.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
