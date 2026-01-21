@@ -35,7 +35,7 @@ spec:
           image: butterfly/butterfly-api:0.1.0
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 443
+            - containerPort: 80
               protocol: TCP
           envFrom:
             - secretRef:
@@ -47,7 +47,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /api/v0
-              port: 443
+              port: 80
             initialDelaySeconds: 10
             periodSeconds: 15
             timeoutSeconds: 5
@@ -55,7 +55,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /api/v0
-              port: 443
+              port: 80
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
