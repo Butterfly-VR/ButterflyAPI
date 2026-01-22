@@ -10,10 +10,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - www.butterflyvr.net
+        - butterflyvr.net
       secretName: butterfly-api-tls
   rules:
-    - host: www.butterflyvr.net
+    - host: butterflyvr.net
       http:
         paths:
           - path: /
