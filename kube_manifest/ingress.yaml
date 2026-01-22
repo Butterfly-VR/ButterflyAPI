@@ -11,9 +11,31 @@ spec:
   tls:
     - hosts:
         - butterflyvr.net
+        - www.butterflyvr.net
+        - api.butterflyvr.net
       secretName: butterfly-api-tls
   rules:
     - host: butterflyvr.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: butterfly-api
+                port:
+                  number: 80
+    - host: www.butterflyvr.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: butterfly-api
+                port:
+                  number: 80
+    - host: api.butterflyvr.net
       http:
         paths:
           - path: /
