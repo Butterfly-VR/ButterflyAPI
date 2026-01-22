@@ -2,18 +2,15 @@ use crate::hash::HASHER_MEMORY;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::{Router, http, middleware, routing::get};
+use axum::{Router, http, routing::get};
 use bb8::Pool;
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use dotenvy::dotenv;
 use serde::Serialize;
-use std::collections::{HashMap, VecDeque};
 use std::error::Error;
-use std::net::IpAddr;
-use std::time::SystemTime;
 use std::{env, sync::Arc};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 mod auth;
 mod email;
@@ -24,7 +21,6 @@ mod search;
 //mod instance_websocket;
 pub mod models;
 mod objects;
-mod rate_limit;
 pub mod schema;
 mod tokens;
 // will finish later
@@ -86,7 +82,6 @@ struct AppState {
     pool: Pool<AsyncDieselConnectionManager<AsyncPgConnection>>,
     s3_client: aws_sdk_s3::Client,
     hasher_memory: [Mutex<Vec<argon2::Block>>; HASHER_MEMORY_BLOCKS],
-    request_history: RwLock<HashMap<IpAddr, Mutex<VecDeque<SystemTime>>>>,
 }
 
 #[tokio::main]
@@ -109,7 +104,6 @@ async fn main() {
         hasher_memory: std::array::from_fn(|_| {
             Mutex::new(vec![argon2::Block::new(); HASHER_MEMORY as usize])
         }),
-        request_history: RwLock::new(HashMap::with_capacity(256)),
     });
 
     let app = Router::new()
@@ -118,11 +112,7 @@ async fn main() {
         .nest(ROUTE_ORIGIN, tokens::tokens_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, objects::objects_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, search::search_router(app_state.clone()))
-        .layer(TraceLayer::new_for_http())
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            rate_limit::rate_limit::<60, 720, 7200>,
-        ));
+        .layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:80").await.unwrap();
 
