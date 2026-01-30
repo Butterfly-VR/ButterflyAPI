@@ -1,7 +1,6 @@
 use crate::ApiError;
 use crate::AppState;
 use crate::auth;
-use crate::models::Object;
 use crate::models::PublicUserInfo;
 use crate::schema::objects;
 use crate::schema::tags;
@@ -22,13 +21,25 @@ use uuid::Uuid;
 const SEARCH_ROUTE: &str = "/search/{query}";
 
 #[derive(Serialize)]
+pub struct ShortObject {
+    id: Uuid,
+    name: String,
+}
+
+impl From<(Uuid, String)> for ShortObject {
+    fn from((id, name): (Uuid, String)) -> Self {
+        ShortObject { id, name }
+    }
+}
+
+#[derive(Serialize)]
 pub struct SearchResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     users: Option<Vec<PublicUserInfo>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    worlds: Option<Vec<Object>>,
+    worlds: Option<Vec<ShortObject>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatars: Option<Vec<Object>>,
+    avatars: Option<Vec<ShortObject>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -149,9 +160,9 @@ pub async fn search_objects(
     filters: &[Filter],
     search_term: &str,
     conn: &mut AsyncPgConnection,
-) -> Vec<Object> {
+) -> Vec<ShortObject> {
     let mut query = objects::table
-        .select(Object::as_select())
+        .select((objects::id, objects::name))
         .filter(objects::name.like(format!("%{}%", search_term)))
         .or_filter(objects::description.like(format!("%{}%", search_term)))
         .left_join(tags::table)
@@ -181,7 +192,13 @@ pub async fn search_objects(
             _ => {}
         }
     }
-    query.load(conn).await.unwrap()
+    query
+        .load::<(Uuid, String)>(conn)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|x| x.into())
+        .collect()
 }
 
 pub async fn search_users(
