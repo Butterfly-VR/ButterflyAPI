@@ -14,17 +14,15 @@ use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 mod auth;
 mod email;
+mod gameserver_handler;
 mod hash;
-//mod instances;
-mod search;
-// will finish later
-//mod instance_websocket;
+mod instance_websocket;
+mod instances;
 pub mod models;
 mod objects;
 pub mod schema;
+mod search;
 mod tokens;
-// will finish later
-//mod user_websocket;
 mod users;
 use std::net::SocketAddr;
 
@@ -81,6 +79,7 @@ struct AppState {
     //readonly_pool: Pool<AsyncDieselConnectionManager<AsyncPgConnection>>,
     pool: Pool<AsyncDieselConnectionManager<AsyncPgConnection>>,
     s3_client: aws_sdk_s3::Client,
+    kube_client: kube::Client,
     hasher_memory: [Mutex<Vec<argon2::Block>>; HASHER_MEMORY_BLOCKS],
 }
 
@@ -101,6 +100,9 @@ async fn main() {
             .await
             .expect("failed to connect to the database"),
         s3_client: aws_sdk_s3::Client::new(&aws_config::load_from_env().await),
+        kube_client: kube::Client::try_default()
+            .await
+            .expect("failed to connect to the kube api"),
         hasher_memory: std::array::from_fn(|_| {
             Mutex::new(vec![argon2::Block::new(); HASHER_MEMORY as usize])
         }),
