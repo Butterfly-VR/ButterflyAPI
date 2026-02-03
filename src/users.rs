@@ -22,7 +22,8 @@ use diesel::insert_into;
 use diesel::prelude::*;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
-use rand_core::TryRngCore;
+use rand::TryRngCore;
+use rand::rngs::OsRng;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::Duration;
@@ -90,7 +91,7 @@ pub async fn sign_up(
             }
 
             let mut password_salt = [0; 64];
-            rand_core::OsRng.try_fill_bytes(&mut password_salt)?;
+            OsRng.try_fill_bytes(&mut password_salt)?;
 
             if let Ok(password_hash) = hash_password(
                 state.clone(),
@@ -100,7 +101,7 @@ pub async fn sign_up(
             .await
             {
                 let mut token = [0; 64];
-                rand_core::OsRng.try_fill_bytes(&mut token)?;
+                OsRng.try_fill_bytes(&mut token)?;
 
                 let id = Uuid::new_v4();
 

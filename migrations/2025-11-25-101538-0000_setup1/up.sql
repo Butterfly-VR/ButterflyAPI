@@ -1,3 +1,7 @@
+-- IMPORTANT: we definetly cannot drop the db everytime we update the schema so
+-- if you make changes, do so additively so they get applied on top of the existing schema
+-- example: instead of changing the table schema in ADD TABLE, make the change in a new ALTER TABLE
+
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
@@ -10,6 +14,17 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"avatar" UUID,
 	PRIMARY KEY("id")
 );
+
+CREATE INDEX "users_email_index_hash"
+ON "users" USING HASH("email");
+
+CREATE INDEX "users_trust_index" ON "users" ("trust");
+CREATE INDEX "users_homeworld_index" ON "users" ("homeworld");
+CREATE INDEX "users_avatar_index" ON "users" ("avatar");
+
+ALTER TABLE "users" ADD COLUMN "instance" UUID NOT NULL;
+
+CREATE INDEX "users_instance_index" ON "users" ("instance");
 
 CREATE TABLE IF NOT EXISTS "unverified_users" (
 	"id" UUID NOT NULL UNIQUE,
@@ -30,6 +45,8 @@ CREATE TABLE IF NOT EXISTS "tokens" (
 	PRIMARY KEY("token")
 );
 
+CREATE INDEX "tokens_user_index" ON "tokens" ("user");
+
 CREATE TABLE IF NOT EXISTS "objects" (
 	"id" UUID NOT NULL UNIQUE,
 	"name" VARCHAR(32) NOT NULL UNIQUE,
@@ -49,13 +66,20 @@ CREATE TABLE IF NOT EXISTS "objects" (
 	PRIMARY KEY("id")
 );
 
+CREATE INDEX "objects_updated_at_index" ON "objects" ("updated_at");
+CREATE INDEX "objects_created_at_index" ON "objects" ("created_at");
+CREATE INDEX "objects_object_size_index" ON "objects" ("object_size");
+CREATE INDEX "objects_creator_index" ON "objects" ("creator");
+CREATE INDEX "objects_object_type_index" ON "objects" ("object_type");
+CREATE INDEX "objects_publicity_index" ON "objects" ("publicity");
+
 CREATE TABLE IF NOT EXISTS "licenses" (
 	"license" SERIAL NOT NULL UNIQUE,
 	"text" VARCHAR(100000) NOT NULL UNIQUE,
 	PRIMARY KEY("license")
 );
 
-CREATE INDEX "licenses_text_index"
+CREATE INDEX "licenses_text_index_hash"
 ON "licenses" USING HASH ("text");
 
 CREATE TABLE IF NOT EXISTS "tags" (
@@ -64,12 +88,31 @@ CREATE TABLE IF NOT EXISTS "tags" (
 	PRIMARY KEY("tag", "object")
 );
 
-CREATE INDEX "tags_tag_index"
-ON "tags" ("tag");
-CREATE INDEX "tags_object_index"
-ON "tags" ("object");
+CREATE INDEX "tags_tag_index" ON "tags" ("tag");
+CREATE INDEX "tags_object_index" ON "tags" ("object");
 
+CREATE TABLE IF NOT EXISTS "instances" (
+    "id" UUID NOT NULL UNIQUE,
+	"server_token" UUID NOT NULL UNIQUE,
+	"world" UUID NOT NULL,
+	"name" VARCHAR(32) NOT NULL,
+	"max_players" SMALLINT NOT NULL,
+	"publicity" SMALLINT NOT NULL,
+	"anyone_can_invite" BOOLEAN NOT NULL,
+	"is_gameserver" BOOLEAN NOT NULL,
+	PRIMARY KEY("id")
+);
 
+CREATE INDEX "instances_world_index" ON "instances" ("world");
+CREATE INDEX "instances_name_index" ON "instances" ("name");
+
+ALTER TABLE "instances"
+ADD FOREIGN KEY("world") REFERENCES "objects"("id")
+ON UPDATE CASCADE ON DELETE CASCADE;
+
+ALTER TABLE "users"
+ADD FOREIGN KEY("instance") REFERENCES "instances"("id")
+ON UPDATE CASCADE ON DELETE CASCADE;
 
 ALTER TABLE "tokens"
 ADD FOREIGN KEY("user") REFERENCES "users"("id")

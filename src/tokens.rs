@@ -17,7 +17,8 @@ use diesel::insert_into;
 use diesel::prelude::*;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
-use rand_core::TryRngCore;
+use rand::TryRngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -106,7 +107,7 @@ pub async fn sign_in(
             // if this code block isnt reached, critical section lasts until the end of the function
             let mut t = vec![0; 64];
 
-            rand_core::OsRng.try_fill_bytes(&mut t)?;
+            OsRng.try_fill_bytes(&mut t)?;
 
             let token_value: Token = Token {
                 user: u.id,
@@ -155,7 +156,7 @@ pub async fn renew(
     let mut conn = state.pool.get().await?;
 
     let mut t = vec![0; 64];
-    rand_core::OsRng.try_fill_bytes(&mut t)?;
+    OsRng.try_fill_bytes(&mut t)?;
 
     let token_value: Token = Token {
         user: user_id.0,

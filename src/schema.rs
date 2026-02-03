@@ -1,6 +1,20 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    instances (id) {
+        id -> Uuid,
+        server_token -> Uuid,
+        world -> Uuid,
+        #[max_length = 32]
+        name -> Varchar,
+        max_players -> Int2,
+        publicity -> Int2,
+        anyone_can_invite -> Bool,
+        is_gameserver -> Bool,
+    }
+}
+
+diesel::table! {
     licenses (license) {
         license -> Int4,
         #[max_length = 100000]
@@ -74,14 +88,18 @@ diesel::table! {
         trust -> Int4,
         homeworld -> Nullable<Uuid>,
         avatar -> Nullable<Uuid>,
+        instance -> Uuid,
     }
 }
 
+diesel::joinable!(instances -> objects (world));
 diesel::joinable!(objects -> licenses (license));
 diesel::joinable!(tags -> objects (object));
 diesel::joinable!(tokens -> users (user));
+diesel::joinable!(users -> instances (instance));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    instances,
     licenses,
     objects,
     tags,
