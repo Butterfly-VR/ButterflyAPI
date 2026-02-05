@@ -1,8 +1,4 @@
--- IMPORTANT: we definetly cannot drop the db everytime we update the schema so
--- if you make changes, do so additively so they get applied on top of the existing schema
--- example: instead of changing the table schema in ADD TABLE, make the change in a new ALTER TABLE
-
-CREATE TABLE IF NOT EXISTS "users" (
+CREATE TABLE "users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
 	"email" VARCHAR(128) NOT NULL UNIQUE,
@@ -10,8 +6,9 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"salt" BYTEA NOT NULL,
 	"permisions" BOOLEAN[] NOT NULL,
 	"trust" INTEGER NOT NULL,
-	"homeworld" UUID,
-	"avatar" UUID,
+	"homeworld" UUID NULL,
+	"avatar" UUID NULL,
+	"instance" UUID NULL,
 	PRIMARY KEY("id")
 );
 
@@ -22,11 +19,9 @@ CREATE INDEX "users_trust_index" ON "users" ("trust");
 CREATE INDEX "users_homeworld_index" ON "users" ("homeworld");
 CREATE INDEX "users_avatar_index" ON "users" ("avatar");
 
-ALTER TABLE "users" ADD COLUMN "instance" UUID NOT NULL;
-
 CREATE INDEX "users_instance_index" ON "users" ("instance");
 
-CREATE TABLE IF NOT EXISTS "unverified_users" (
+CREATE TABLE "unverified_users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
 	"email" VARCHAR(128) NOT NULL UNIQUE,
@@ -37,7 +32,7 @@ CREATE TABLE IF NOT EXISTS "unverified_users" (
 	PRIMARY KEY("id")
 );
 
-CREATE TABLE IF NOT EXISTS "tokens" (
+CREATE TABLE "tokens" (
 	"token" BYTEA NOT NULL UNIQUE,
 	"user" UUID NOT NULL,
 	"renewable" BOOLEAN NOT NULL,
@@ -47,7 +42,7 @@ CREATE TABLE IF NOT EXISTS "tokens" (
 
 CREATE INDEX "tokens_user_index" ON "tokens" ("user");
 
-CREATE TABLE IF NOT EXISTS "objects" (
+CREATE TABLE "objects" (
 	"id" UUID NOT NULL UNIQUE,
 	"name" VARCHAR(32) NOT NULL UNIQUE,
 	"description" VARCHAR(4096) NOT NULL,
@@ -73,7 +68,7 @@ CREATE INDEX "objects_creator_index" ON "objects" ("creator");
 CREATE INDEX "objects_object_type_index" ON "objects" ("object_type");
 CREATE INDEX "objects_publicity_index" ON "objects" ("publicity");
 
-CREATE TABLE IF NOT EXISTS "licenses" (
+CREATE TABLE "licenses" (
 	"license" SERIAL NOT NULL UNIQUE,
 	"text" VARCHAR(100000) NOT NULL UNIQUE,
 	PRIMARY KEY("license")
@@ -82,7 +77,7 @@ CREATE TABLE IF NOT EXISTS "licenses" (
 CREATE INDEX "licenses_text_index_hash"
 ON "licenses" USING HASH ("text");
 
-CREATE TABLE IF NOT EXISTS "tags" (
+CREATE TABLE "tags" (
 	"tag" VARCHAR(32) NOT NULL,
 	"object" UUID NOT NULL,
 	PRIMARY KEY("tag", "object")
@@ -91,15 +86,16 @@ CREATE TABLE IF NOT EXISTS "tags" (
 CREATE INDEX "tags_tag_index" ON "tags" ("tag");
 CREATE INDEX "tags_object_index" ON "tags" ("object");
 
-CREATE TABLE IF NOT EXISTS "instances" (
+CREATE TABLE "instances" (
     "id" UUID NOT NULL UNIQUE,
-	"server_token" UUID NOT NULL UNIQUE,
+	"server_token" BYTEA NOT NULL UNIQUE,
 	"world" UUID NOT NULL,
 	"name" VARCHAR(32) NOT NULL,
 	"max_players" SMALLINT NOT NULL,
 	"publicity" SMALLINT NOT NULL,
 	"anyone_can_invite" BOOLEAN NOT NULL,
 	"is_gameserver" BOOLEAN NOT NULL,
+	"last_used_client_token" BYTEA NOT NULL,
 	PRIMARY KEY("id")
 );
 
@@ -113,6 +109,12 @@ ON UPDATE CASCADE ON DELETE CASCADE;
 ALTER TABLE "users"
 ADD FOREIGN KEY("instance") REFERENCES "instances"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
+ALTER TABLE "users"
+ADD FOREIGN KEY("homeworld") REFERENCES "objects"("id")
+ON UPDATE CASCADE ON DELETE SET NULL;
+ALTER TABLE "users"
+ADD FOREIGN KEY("avatar") REFERENCES "objects"("id")
+ON UPDATE CASCADE ON DELETE SET NULL;
 
 ALTER TABLE "tokens"
 ADD FOREIGN KEY("user") REFERENCES "users"("id")
@@ -128,10 +130,3 @@ ON UPDATE CASCADE ON DELETE NO ACTION;
 ALTER TABLE "tags"
 ADD FOREIGN KEY("object") REFERENCES "objects"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
-
-ALTER TABLE "users"
-ADD FOREIGN KEY("homeworld") REFERENCES "objects"("id")
-ON UPDATE CASCADE ON DELETE SET NULL;
-ALTER TABLE "users"
-ADD FOREIGN KEY("avatar") REFERENCES "objects"("id")
-ON UPDATE CASCADE ON DELETE SET NULL;

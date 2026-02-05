@@ -46,6 +46,7 @@ pub struct Object {
 
 #[derive(Queryable, Selectable, Insertable, Serialize)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(belongs_to(Instance, foreign_key = instance))]
 pub struct User {
     pub id: Uuid,
     pub username: String,
@@ -58,6 +59,7 @@ pub struct User {
     pub trust: i32,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
+    pub instance: Option<Uuid>,
 }
 
 #[derive(Queryable, Selectable, Insertable, Serialize)]
@@ -118,4 +120,19 @@ pub struct License {
 pub struct Tag {
     object: Uuid,
     tag: String,
+}
+
+#[derive(Queryable, Serialize, Selectable, Associations, Insertable)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(belongs_to(Object, foreign_key = world))]
+pub struct Instance {
+    id: Uuid,
+    server_token: Vec<u8>,
+    world: Uuid,
+    name: String,
+    max_players: i16,
+    publicity: i16,
+    anyone_can_invite: bool,
+    is_gameserver: bool,
+    last_used_client_token: Vec<u8>,
 }

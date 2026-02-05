@@ -3,7 +3,7 @@
 diesel::table! {
     instances (id) {
         id -> Uuid,
-        server_token -> Uuid,
+        server_token -> Bytea,
         world -> Uuid,
         #[max_length = 32]
         name -> Varchar,
@@ -11,6 +11,7 @@ diesel::table! {
         publicity -> Int2,
         anyone_can_invite -> Bool,
         is_gameserver -> Bool,
+        last_used_client_token -> Bytea,
     }
 }
 
@@ -88,7 +89,7 @@ diesel::table! {
         trust -> Int4,
         homeworld -> Nullable<Uuid>,
         avatar -> Nullable<Uuid>,
-        instance -> Uuid,
+        instance -> Nullable<Uuid>,
     }
 }
 

@@ -1,5 +1,6 @@
 use crate::kube_resources::*;
 use crate::{ApiError, AppState};
+use axum::http::StatusCode;
 use kube::Api;
 use kube::api::PostParams;
 use std::collections::BTreeMap;
@@ -43,8 +44,21 @@ pub async fn allocate_gameserver(
     Ok(())
 }
 
-// todo: theres a race condition here if two clients connect to a server at the same time
-// they get served the same connection token. probably need some kind of dirty flag
-// so the second client knows to wait. one option would be a last_used_token column on
-// the instance table
-pub async fn get_connect_token(state: AppState, id: Uuid) -> Result<[u8; 1024], ApiError> {}
+// todo: return error indicating that the gameserver is not ready
+pub async fn get_connect_token(state: AppState, id: Uuid) -> Result<Vec<u8>, ApiError> {
+    let client = state.kube_client;
+
+    let gameserver: GameServerAllocation = Api::all(client).get(&id.to_string()).await?;
+
+    let token: Vec<u8> = gameserver
+        .spec
+        .metadata
+        .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?
+        .labels
+        .get("token")
+        .map(String::as_str)
+        .map(serde_json::from_str)
+        .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))??;
+
+    return Ok(token);
+}
