@@ -4,6 +4,7 @@ use crate::auth;
 use crate::models::*;
 use crate::schema::instances;
 use crate::schema::users;
+use axum::extract::Path;
 use axum::extract::State;
 use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
@@ -30,7 +31,6 @@ struct InstanceSearch {
     is_gameserver: Option<bool>,
 }
 
-#[axum::debug_handler]
 pub async fn search_instances(
     State(state): State<Arc<AppState>>,
     Json(search): Json<InstanceSearch>,
@@ -84,13 +84,27 @@ pub async fn search_instances(
                 .map(|x| {
                     x.into_iter()
                         .map(|(instance, _): (Instance, i64)| instance)
-                        .collect()
+                        .collect() // extract the instances and ignore the player count
                 })
                 .map(Json)
         }
         .scope_boxed()
     })
     .await
+}
+
+pub async fn get_instance(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Instance>, ApiError> {
+    let mut conn = state.pool.get().await?;
+    instances::table
+        .select(Instance::as_select())
+        .filter(instances::id.eq(id))
+        .get_result::<Instance>(&mut conn)
+        .await
+        .map_err(ApiError::from)
+        .map(Json)
 }
 
 pub fn instances_router(app_state: Arc<AppState>) -> Router {

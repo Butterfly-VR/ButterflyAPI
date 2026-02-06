@@ -127,6 +127,7 @@ pub struct Tag {
 #[diesel(belongs_to(Object, foreign_key = world))]
 pub struct Instance {
     id: Uuid,
+    #[serde(skip_serializing)]
     server_token: Vec<u8>,
     world: Uuid,
     name: String,
@@ -134,5 +135,6 @@ pub struct Instance {
     publicity: i16,
     anyone_can_invite: bool,
     is_gameserver: bool,
+    #[serde(skip_serializing)]
     last_used_client_token: Vec<u8>,
 }

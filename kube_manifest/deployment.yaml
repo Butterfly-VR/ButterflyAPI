@@ -22,8 +22,7 @@ spec:
       initContainers:
         - name: run-migrations
           image: butterflyvr/butterflyapi:0.1.4
-          command: ["/bin/sh"]
-          args: ["-c", "diesel migration revert; diesel migration run"]
+          command: ["diesel", "migration", "run"]
           envFrom:
             - secretRef:
                 name: butterfly-api-secrets

@@ -44,11 +44,36 @@ pub async fn allocate_gameserver(
     Ok(())
 }
 
+enum ConnectTokenRetrievalError {
+    GameserverClosed,
+    GameserverNotReady,
+    Generic(ApiError),
+}
+
+impl From<ApiError> for ConnectTokenRetrievalError {
+    fn from(error: ApiError) -> Self {
+        ConnectTokenRetrievalError::Generic(error)
+    }
+}
+
+impl<T: core::error::Error> From<T> for ConnectTokenRetrievalError {
+    fn from(error: T) -> Self {
+        ConnectTokenRetrievalError::Generic(error.into())
+    }
+}
+
 // todo: return error indicating that the gameserver is not ready
-pub async fn get_connect_token(state: AppState, id: Uuid) -> Result<Vec<u8>, ApiError> {
+pub async fn get_connect_token(
+    state: AppState,
+    id: Uuid,
+) -> Result<Vec<u8>, ConnectTokenRetrievalError> {
     let client = state.kube_client;
 
-    let gameserver: GameServerAllocation = Api::all(client).get(&id.to_string()).await?;
+    let Some(gameserver): Option<GameServerAllocation> =
+        Api::all(client).get_opt(&id.to_string()).await?
+    else {
+        return Err(ConnectTokenRetrievalError::GameserverClosed);
+    };
 
     let token: Vec<u8> = gameserver
         .spec
@@ -58,7 +83,8 @@ pub async fn get_connect_token(state: AppState, id: Uuid) -> Result<Vec<u8>, Api
         .get("token")
         .map(String::as_str)
         .map(serde_json::from_str)
-        .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))??;
+        // probably not ready if this is None, but should probably be more finegrained here
+        .ok_or(ConnectTokenRetrievalError::GameserverNotReady)??;
 
     return Ok(token);
 }
