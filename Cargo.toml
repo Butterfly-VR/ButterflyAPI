@@ -3,6 +3,16 @@ name = "ButterflyAPI"
 version = "0.1.0"
 edition = "2024"
 
+[profile.dev]
+debug = "line-tables-only"
+lto = "off"
+
+[profile.release]
+strip = "debuginfo"
+lto = "thin"
+# todo: test different values here
+codegen-units = 16
+
 [dependencies]
 kube = { version = "3.0.1", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.27.0", features = ["latest", "schemars"] }
