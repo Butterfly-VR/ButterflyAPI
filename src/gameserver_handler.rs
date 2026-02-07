@@ -8,13 +8,13 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 pub async fn allocate_gameserver(
-    state: AppState,
+    state: Arc<AppState>,
     id: Uuid,
     instance_token: [u8; 64],
     world: Uuid,
     _dedicated_gameserver: bool,
 ) -> Result<(), ApiError> {
-    let client = state.kube_client;
+    let client = state.kube_client.clone();
 
     let mut labels: BTreeMap<String, String> = BTreeMap::new();
     labels.insert("world".to_string(), world.to_string());
@@ -67,7 +67,7 @@ pub async fn get_connect_token(
     state: Arc<AppState>,
     id: Uuid,
 ) -> Result<Vec<u8>, ConnectTokenRetrievalError> {
-    let client = state.kube_client;
+    let client = state.kube_client.clone();
 
     let Some(gameserver): Option<GameServerAllocation> =
         Api::all(client).get_opt(&id.to_string()).await?

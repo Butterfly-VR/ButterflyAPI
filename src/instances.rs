@@ -2,6 +2,7 @@ use crate::ApiError;
 use crate::AppState;
 use crate::auth;
 use crate::gameserver_handler::ConnectTokenRetrievalError;
+use crate::gameserver_handler::allocate_gameserver;
 use crate::gameserver_handler::get_connect_token;
 use crate::models::*;
 use crate::schema::instances;
@@ -13,10 +14,13 @@ use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::dsl::count;
 use diesel::dsl::sql;
+use diesel::insert_into;
 use diesel::prelude::*;
 use diesel::sql_types::BigInt;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
+use rand::TryRngCore;
+use rand::rngs::OsRng;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,7 +34,54 @@ const INSTANCE_JOIN_ROUTE: &str = constcat::concat!(INSTANCE_ID_ROUTE, "/join");
 const INSTANCE_SEARCH_ROUTE: &str = constcat::concat!(INSTANCES_ROUTE, "/search");
 
 #[derive(Deserialize)]
-struct InstanceSearch {
+pub struct InstanceCreation {
+    world: Uuid,
+    name: String,
+    max_players: i16,
+    publicity: i16,
+    anyone_can_invite: bool,
+    is_gameserver: bool,
+}
+
+pub async fn create_instance(
+    State(state): State<Arc<AppState>>,
+    Json(instance_details): Json<InstanceCreation>,
+) -> Result<(), ApiError> {
+    let mut conn = state.pool.get().await?;
+
+    let id = Uuid::new_v4();
+
+    let mut instance_token: [u8; 64] = [0; 64];
+    OsRng.try_fill_bytes(&mut instance_token)?;
+
+    let instance: Instance = Instance {
+        id,
+        server_token: instance_token.to_vec(),
+        world: instance_details.world,
+        name: instance_details.name,
+        max_players: instance_details.max_players,
+        publicity: instance_details.publicity,
+        anyone_can_invite: instance_details.anyone_can_invite,
+        is_gameserver: instance_details.is_gameserver,
+        last_used_client_token: [0_u8; 64].to_vec(),
+    };
+
+    insert_into(instances::table)
+        .values(instance)
+        .execute(&mut conn)
+        .await?;
+    allocate_gameserver(
+        state.clone(),
+        id,
+        instance_token,
+        instance_details.world,
+        instance_details.is_gameserver,
+    )
+    .await
+}
+
+#[derive(Deserialize)]
+pub struct InstanceSearch {
     world: Uuid,
     is_full: Option<bool>,
     is_empty: Option<bool>,
