@@ -118,23 +118,23 @@ pub struct License {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 #[diesel(belongs_to(Object, foreign_key = object))]
 pub struct Tag {
-    object: Uuid,
-    tag: String,
+    pub object: Uuid,
+    pub tag: String,
 }
 
 #[derive(Queryable, Serialize, Selectable, Associations, Insertable)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 #[diesel(belongs_to(Object, foreign_key = world))]
 pub struct Instance {
-    id: Uuid,
+    pub id: Uuid,
     #[serde(skip_serializing)]
-    server_token: Vec<u8>,
-    world: Uuid,
-    name: String,
-    max_players: i16,
-    publicity: i16,
-    anyone_can_invite: bool,
-    is_gameserver: bool,
+    pub server_token: Vec<u8>,
+    pub world: Uuid,
+    pub name: String,
+    pub max_players: i16,
+    pub publicity: i16,
+    pub anyone_can_invite: bool,
+    pub is_gameserver: bool,
     #[serde(skip_serializing)]
-    last_used_client_token: Vec<u8>,
+    pub last_used_client_token: Vec<u8>,
 }

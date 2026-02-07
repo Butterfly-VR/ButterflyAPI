@@ -4,6 +4,7 @@ use axum::http::StatusCode;
 use kube::Api;
 use kube::api::PostParams;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use uuid::Uuid;
 
 pub async fn allocate_gameserver(
@@ -44,7 +45,7 @@ pub async fn allocate_gameserver(
     Ok(())
 }
 
-enum ConnectTokenRetrievalError {
+pub enum ConnectTokenRetrievalError {
     GameserverClosed,
     GameserverNotReady,
     Generic(ApiError),
@@ -62,9 +63,8 @@ impl<T: core::error::Error> From<T> for ConnectTokenRetrievalError {
     }
 }
 
-// todo: return error indicating that the gameserver is not ready
 pub async fn get_connect_token(
-    state: AppState,
+    state: Arc<AppState>,
     id: Uuid,
 ) -> Result<Vec<u8>, ConnectTokenRetrievalError> {
     let client = state.kube_client;
@@ -83,7 +83,7 @@ pub async fn get_connect_token(
         .get("token")
         .map(String::as_str)
         .map(serde_json::from_str)
-        // probably not ready if this is None, but should probably be more finegrained here
+        // probably not ready if this is None, but should be more finegrained here
         .ok_or(ConnectTokenRetrievalError::GameserverNotReady)??;
 
     return Ok(token);

@@ -1,11 +1,14 @@
 use crate::ApiError;
 use crate::AppState;
 use crate::auth;
+use crate::gameserver_handler::ConnectTokenRetrievalError;
+use crate::gameserver_handler::get_connect_token;
 use crate::models::*;
 use crate::schema::instances;
 use crate::schema::users;
 use axum::extract::Path;
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::dsl::count;
@@ -16,6 +19,9 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
 use serde::Deserialize;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::sleep;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 const INSTANCES_ROUTE: &str = "/instances";
@@ -105,6 +111,52 @@ pub async fn get_instance(
         .await
         .map_err(ApiError::from)
         .map(Json)
+}
+
+pub async fn join_instance(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<u8>>, ApiError> {
+    const DUPLICATE_TOKEN_RETRY_TIME: Duration = Duration::from_secs(1);
+    const MAX_RETY_ATTEMPTS: usize = 5;
+
+    let mut conn = state.pool.get().await?;
+    let state = state.clone();
+
+    conn.transaction(|mut conn| {
+    async move {
+        let Some(instance) = instances::table.select(Instance::as_select()).filter(instances::id.eq(id)).get_result(&mut conn).await.optional()? else{
+            return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
+        };
+        for _ in 0..MAX_RETY_ATTEMPTS{
+            match get_connect_token(state.clone(), id).await {
+                Ok(token) => {
+                if token == instance.last_used_client_token{
+                info!("got duplicate token, if this keeps happening we may need to rework this handling");
+                sleep(DUPLICATE_TOKEN_RETRY_TIME).await;
+                continue;
+            }
+            else{
+                return Ok(Json(token));
+                }
+            }
+            Err(err) => {
+                match err{
+                    ConnectTokenRetrievalError::GameserverClosed => {return Err(ApiError::WithCode(StatusCode::NOT_FOUND))}
+                    ConnectTokenRetrievalError::GameserverNotReady => return Err(ApiError::WithCode(StatusCode::SERVICE_UNAVAILABLE)),
+                    ConnectTokenRetrievalError::Generic(err) => return Err(err)
+                }
+            }
+            }
+
+        }
+        // must of hit max reties?
+        warn!("ran out of attempts retriving connect token");
+        Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))
+    }
+    .scope_boxed()
+})
+.await
 }
 
 pub fn instances_router(app_state: Arc<AppState>) -> Router {
