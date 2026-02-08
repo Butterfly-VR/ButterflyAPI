@@ -10,8 +10,7 @@ lto = "off"
 [profile.release]
 strip = "debuginfo"
 lto = "thin"
-# todo: test different values here
-codegen-units = 16
+codegen-units = 2
 
 [dependencies]
 kube = { version = "3.0.1", features = ["runtime", "derive"] }
