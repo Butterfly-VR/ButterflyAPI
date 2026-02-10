@@ -158,7 +158,7 @@ pub async fn create_or_update_object(
                 if objects::table
                     .count()
                     .filter(objects::name.eq(&json.name))
-                    .get_result::<i64>(&mut conn)
+                    .first::<i64>(&mut conn)
                     .await?
                     != 0
                 {
@@ -389,7 +389,7 @@ pub async fn change_object_file(
                     .s3_client
                     .head_object()
                     .bucket(enum_str)
-                    .key(&object_id.to_string())
+                    .key(object_id.to_string())
                     .send()
                     .await?
                     .content_length()
@@ -493,7 +493,7 @@ pub async fn change_object_image(
                     .s3_client
                     .head_object()
                     .bucket(&(enum_str.to_owned() + "-images"))
-                    .key(&object_id.to_string())
+                    .key(object_id.to_string())
                     .send()
                     .await?
                     .content_length()

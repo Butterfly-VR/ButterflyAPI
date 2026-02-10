@@ -86,5 +86,5 @@ pub async fn get_connect_token(
         // probably not ready if this is None, but should be more finegrained here
         .ok_or(ConnectTokenRetrievalError::GameserverNotReady)??;
 
-    return Ok(token);
+    Ok(token)
 }

@@ -186,7 +186,7 @@ pub async fn get_user(
     if let Ok(u) = users
         .select(PublicUserInfo::as_select())
         .filter(id.eq(user_id.0))
-        .get_result(&mut conn)
+        .first(&mut conn)
         .await
     {
         Ok(Json(u))

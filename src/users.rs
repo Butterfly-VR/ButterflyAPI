@@ -77,7 +77,7 @@ pub async fn sign_up(
                 .count()
                 .filter(users::username.eq(&json.username))
                 .or_filter(users::email.eq(&json.email))
-                .get_result::<i64>(&mut conn)
+                .first::<i64>(&mut conn)
                 .await?
                 != 0
             {
@@ -214,7 +214,7 @@ pub async fn verify_email(
             if let Some(user) = unverified_users::table
                 .select(UnverifiedUser::as_select())
                 .filter(unverified_users::id.eq(usr_id))
-                .get_result(&mut conn)
+                .first(&mut conn)
                 .await
                 .optional()?
             {
@@ -254,7 +254,7 @@ pub async fn verify_email(
             } else if users::table
                 .count()
                 .filter(users::id.eq(usr_id))
-                .get_result::<i64>(&mut conn)
+                .first::<i64>(&mut conn)
                 .await?
                 != 0
             {

@@ -158,7 +158,7 @@ pub async fn get_instance(
     instances::table
         .select(Instance::as_select())
         .filter(instances::id.eq(id))
-        .get_result::<Instance>(&mut conn)
+        .first::<Instance>(&mut conn)
         .await
         .map_err(ApiError::from)
         .map(Json)
@@ -176,7 +176,7 @@ pub async fn join_instance(
 
     conn.transaction(|mut conn| {
     async move {
-        let Some(instance) = instances::table.select(Instance::as_select()).filter(instances::id.eq(id)).get_result(&mut conn).await.optional()? else{
+        let Some(instance) = instances::table.select(Instance::as_select()).filter(instances::id.eq(id)).first(&mut conn).await.optional()?else{
             return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
         };
         for _ in 0..MAX_RETY_ATTEMPTS{

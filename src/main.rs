@@ -16,6 +16,7 @@ mod auth;
 mod email;
 mod gameserver_handler;
 mod hash;
+mod instance_api;
 mod instances;
 mod kube_resources;
 pub mod models;
@@ -115,6 +116,10 @@ async fn main() {
         .nest(ROUTE_ORIGIN, objects::objects_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, search::search_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, instances::instances_router(app_state.clone()))
+        .nest(
+            ROUTE_ORIGIN,
+            instance_api::instance_api_router(app_state.clone()),
+        )
         .layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:80").await.unwrap();

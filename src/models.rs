@@ -84,6 +84,7 @@ pub struct PublicUserInfo {
     pub username: String,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
+    pub instance: Option<Uuid>,
 }
 
 impl From<User> for PublicUserInfo {
@@ -93,6 +94,7 @@ impl From<User> for PublicUserInfo {
             username: value.username,
             homeworld: value.homeworld,
             avatar: value.avatar,
+            instance: value.instance,
         }
     }
 }
