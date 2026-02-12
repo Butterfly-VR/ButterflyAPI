@@ -175,39 +175,47 @@ pub async fn join_instance(
     let state = state.clone();
 
     conn.transaction(|mut conn| {
-    async move {
-        let Some(instance) = instances::table.select(Instance::as_select()).filter(instances::id.eq(id)).first(&mut conn).await.optional()?else{
-            return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
-        };
-        for _ in 0..MAX_RETY_ATTEMPTS{
-            match get_connect_token(state.clone(), id).await {
-                Ok(token) => {
-                if token == instance.last_used_client_token{
-                info!("got duplicate token, if this keeps happening we may need to rework this handling");
-                sleep(DUPLICATE_TOKEN_RETRY_TIME).await;
-                continue;
-            }
-            else{
-                return Ok(Json(token));
+        async move {
+            let Some(instance) = instances::table
+                .select(Instance::as_select())
+                .filter(instances::id.eq(id))
+                .first(&mut conn)
+                .await
+                .optional()?
+            else {
+                return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
+            };
+            for _ in 0..MAX_RETY_ATTEMPTS {
+                match get_connect_token(state.clone(), id).await {
+                    Ok(token) => {
+                        if token == instance.last_used_client_token {
+                            info!(
+                                "got duplicate token, if this keeps happening we may need to rework this handling"
+                            );
+                            sleep(DUPLICATE_TOKEN_RETRY_TIME).await;
+                            continue;
+                        } else {
+                            return Ok(Json(token));
+                        }
+                    }
+                    Err(err) => match err {
+                        ConnectTokenRetrievalError::GameserverClosed => {
+                            return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
+                        }
+                        ConnectTokenRetrievalError::GameserverNotReady => {
+                            return Err(ApiError::WithCode(StatusCode::SERVICE_UNAVAILABLE));
+                        }
+                        ConnectTokenRetrievalError::Generic(err) => return Err(err),
+                    },
                 }
             }
-            Err(err) => {
-                match err{
-                    ConnectTokenRetrievalError::GameserverClosed => {return Err(ApiError::WithCode(StatusCode::NOT_FOUND))}
-                    ConnectTokenRetrievalError::GameserverNotReady => return Err(ApiError::WithCode(StatusCode::SERVICE_UNAVAILABLE)),
-                    ConnectTokenRetrievalError::Generic(err) => return Err(err)
-                }
-            }
-            }
-
+            // must of hit max reties?
+            warn!("ran out of attempts retriving connect token");
+            Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))
         }
-        // must of hit max reties?
-        warn!("ran out of attempts retriving connect token");
-        Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))
-    }
-    .scope_boxed()
-})
-.await
+        .scope_boxed()
+    })
+    .await
 }
 
 pub fn instances_router(app_state: Arc<AppState>) -> Router {
