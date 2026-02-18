@@ -83,7 +83,6 @@ pub async fn get_connect_token(
         .get("token")
         .map(String::as_str)
         .map(serde_json::from_str)
-        // probably not ready if this is None, but should be more finegrained here
         .ok_or(ConnectTokenRetrievalError::GameserverNotReady)??;
 
     Ok(token)
