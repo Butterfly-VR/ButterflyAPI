@@ -90,6 +90,10 @@ async fn main() {
         .with_max_level(tracing::Level::TRACE)
         .init();
 
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .unwrap();
+
     let _ = dotenv();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
