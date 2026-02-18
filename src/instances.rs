@@ -29,9 +29,9 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 const INSTANCES_ROUTE: &str = "/instances";
+const INSTANCE_SEARCH_ROUTE: &str = constcat::concat!(INSTANCES_ROUTE, "/search");
 const INSTANCE_ID_ROUTE: &str = constcat::concat!(INSTANCES_ROUTE, "/{id}");
 const INSTANCE_JOIN_ROUTE: &str = constcat::concat!(INSTANCE_ID_ROUTE, "/join");
-const INSTANCE_SEARCH_ROUTE: &str = constcat::concat!(INSTANCES_ROUTE, "/search");
 
 #[derive(Deserialize)]
 pub struct InstanceCreation {
@@ -83,8 +83,11 @@ pub async fn create_instance(
 #[derive(Deserialize)]
 pub struct InstanceSearch {
     world: Uuid,
+    #[serde(default)]
     is_full: Option<bool>,
+    #[serde(default)]
     is_empty: Option<bool>,
+    #[serde(default)]
     is_gameserver: Option<bool>,
 }
 
