@@ -100,7 +100,6 @@ async fn main() {
 
     let app_state: Arc<AppState> = Arc::new(AppState {
         pool: Pool::builder()
-            .test_on_check_out(true)
             .build(AsyncDieselConnectionManager::new(database_url))
             .await
             .expect("failed to connect to the database"),
