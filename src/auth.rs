@@ -1,4 +1,4 @@
-use crate::{AppState, schema::instances};
+use crate::{ApiError, AppState, schema::instances};
 use axum::{
     body::Body,
     extract::State,
@@ -18,12 +18,8 @@ pub async fn check_auth(
     state: State<Arc<AppState>>,
     mut req: Request<Body>,
     next: Next,
-) -> Result<Response, StatusCode> {
-    let mut conn = state
-        .pool
-        .get()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+) -> Result<Response, ApiError> {
+    let mut conn = state.pool.get().await?;
 
     let header_token = req
         .headers()
@@ -41,19 +37,15 @@ pub async fn check_auth(
         req.extensions_mut().insert(user_id);
         return Ok(next.run(req).await);
     }
-    Err(StatusCode::UNAUTHORIZED)
+    Err(ApiError::WithCode(StatusCode::UNAUTHORIZED))
 }
 
 pub async fn check_instance_auth(
     state: State<Arc<AppState>>,
     mut req: Request<Body>,
     next: Next,
-) -> Result<Response, StatusCode> {
-    let mut conn = state
-        .pool
-        .get()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+) -> Result<Response, ApiError> {
+    let mut conn = state.pool.get().await?;
 
     let header_token = req
         .headers()
@@ -70,5 +62,5 @@ pub async fn check_instance_auth(
         req.extensions_mut().insert(user_id);
         return Ok(next.run(req).await);
     }
-    Err(StatusCode::UNAUTHORIZED)
+    Err(ApiError::WithCode(StatusCode::UNAUTHORIZED))
 }

@@ -1,4 +1,4 @@
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
 	"email" VARCHAR(128) NOT NULL UNIQUE,
@@ -21,7 +21,7 @@ CREATE INDEX "users_avatar_index" ON "users" ("avatar");
 
 CREATE INDEX "users_instance_index" ON "users" ("instance");
 
-CREATE TABLE "unverified_users" (
+CREATE TABLE IF NOT EXISTS "unverified_users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
 	"email" VARCHAR(128) NOT NULL UNIQUE,
@@ -32,7 +32,7 @@ CREATE TABLE "unverified_users" (
 	PRIMARY KEY("id")
 );
 
-CREATE TABLE "tokens" (
+CREATE TABLE IF NOT EXISTS "tokens" (
 	"token" BYTEA NOT NULL UNIQUE,
 	"user" UUID NOT NULL,
 	"renewable" BOOLEAN NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE "tokens" (
 
 CREATE INDEX "tokens_user_index" ON "tokens" ("user");
 
-CREATE TABLE "objects" (
+CREATE TABLE IF NOT EXISTS "objects" (
 	"id" UUID NOT NULL UNIQUE,
 	"name" VARCHAR(32) NOT NULL UNIQUE,
 	"description" VARCHAR(4096) NOT NULL,
@@ -68,7 +68,7 @@ CREATE INDEX "objects_creator_index" ON "objects" ("creator");
 CREATE INDEX "objects_object_type_index" ON "objects" ("object_type");
 CREATE INDEX "objects_publicity_index" ON "objects" ("publicity");
 
-CREATE TABLE "licenses" (
+CREATE TABLE IF NOT EXISTS "licenses" (
 	"license" SERIAL NOT NULL UNIQUE,
 	"text" VARCHAR(100000) NOT NULL UNIQUE,
 	PRIMARY KEY("license")
@@ -77,7 +77,7 @@ CREATE TABLE "licenses" (
 CREATE INDEX "licenses_text_index_hash"
 ON "licenses" USING HASH ("text");
 
-CREATE TABLE "tags" (
+CREATE TABLE IF NOT EXISTS "tags" (
 	"tag" VARCHAR(32) NOT NULL,
 	"object" UUID NOT NULL,
 	PRIMARY KEY("tag", "object")
@@ -86,7 +86,7 @@ CREATE TABLE "tags" (
 CREATE INDEX "tags_tag_index" ON "tags" ("tag");
 CREATE INDEX "tags_object_index" ON "tags" ("object");
 
-CREATE TABLE "instances" (
+CREATE TABLE IF NOT EXISTS "instances" (
     "id" UUID NOT NULL UNIQUE,
 	"server_token" BYTEA NOT NULL UNIQUE,
 	"world" UUID NOT NULL,
@@ -103,30 +103,30 @@ CREATE INDEX "instances_world_index" ON "instances" ("world");
 CREATE INDEX "instances_name_index" ON "instances" ("name");
 
 ALTER TABLE "instances"
-ADD FOREIGN KEY("world") REFERENCES "objects"("id")
+ADD CONSTRAINT fk_instances_objects FOREIGN KEY("world") REFERENCES "objects"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
 
 ALTER TABLE "users"
-ADD FOREIGN KEY("instance") REFERENCES "instances"("id")
+ADD CONSTRAINT fk_users_instances FOREIGN KEY("instance") REFERENCES "instances"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
 ALTER TABLE "users"
-ADD FOREIGN KEY("homeworld") REFERENCES "objects"("id")
+ADD CONSTRAINT fk_users_objects_homeworlds FOREIGN KEY("homeworld") REFERENCES "objects"("id")
 ON UPDATE CASCADE ON DELETE SET NULL;
 ALTER TABLE "users"
-ADD FOREIGN KEY("avatar") REFERENCES "objects"("id")
+ADD CONSTRAINT fk_users_objects_avatars FOREIGN KEY("avatar") REFERENCES "objects"("id")
 ON UPDATE CASCADE ON DELETE SET NULL;
 
 ALTER TABLE "tokens"
-ADD FOREIGN KEY("user") REFERENCES "users"("id")
+ADD CONSTRAINT fk_tokens_users FOREIGN KEY("user") REFERENCES "users"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
 
 ALTER TABLE "objects"
-ADD FOREIGN KEY("creator") REFERENCES "users"("id")
+ADD CONSTRAINT fk_objects_users FOREIGN KEY("creator") REFERENCES "users"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
 ALTER TABLE "objects"
-ADD FOREIGN KEY("license") REFERENCES "licenses"("license")
+ADD CONSTRAINT fk_objects_licenses FOREIGN KEY("license") REFERENCES "licenses"("license")
 ON UPDATE CASCADE ON DELETE NO ACTION;
 
 ALTER TABLE "tags"
-ADD FOREIGN KEY("object") REFERENCES "objects"("id")
+ADD CONSTRAINT fk_tags_objects FOREIGN KEY("object") REFERENCES "objects"("id")
 ON UPDATE CASCADE ON DELETE CASCADE;
