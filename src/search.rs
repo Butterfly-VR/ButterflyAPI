@@ -163,6 +163,7 @@ pub async fn search_objects(
 ) -> Vec<ShortObject> {
     let mut query = objects::table
         .select((objects::id, objects::name))
+        .distinct_on(objects::id)
         .filter(objects::name.like(format!("%{}%", search_term)))
         .or_filter(objects::description.like(format!("%{}%", search_term)))
         .left_join(tags::table)
@@ -208,6 +209,7 @@ pub async fn search_users(
 ) -> Vec<PublicUserInfo> {
     let mut query = users::table
         .select(PublicUserInfo::as_select())
+        .distinct_on(users::id)
         .filter(users::username.like(format!("%{}%", search_term)))
         .limit(100)
         .into_boxed();

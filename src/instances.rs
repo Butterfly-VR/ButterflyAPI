@@ -22,6 +22,7 @@ use diesel_async::{AsyncConnection, RunQueryDsl};
 use rand::TryRngCore;
 use rand::rngs::OsRng;
 use serde::Deserialize;
+use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -91,10 +92,21 @@ pub struct InstanceSearch {
     is_gameserver: Option<bool>,
 }
 
+#[derive(Serialize)]
+pub struct InstanceSearchResult {
+    instances: Vec<Instance>,
+}
+
+impl From<Vec<Instance>> for InstanceSearchResult {
+    fn from(instances: Vec<Instance>) -> Self {
+        InstanceSearchResult { instances }
+    }
+}
+
 pub async fn search_instances(
     State(state): State<Arc<AppState>>,
     Json(search): Json<InstanceSearch>,
-) -> Result<Json<Vec<Instance>>, ApiError> {
+) -> Result<Json<InstanceSearchResult>, ApiError> {
     let mut conn = state.pool.get().await?;
 
     conn.transaction(|conn| {
@@ -144,7 +156,8 @@ pub async fn search_instances(
                 .map(|x| {
                     x.into_iter()
                         .map(|(instance, _): (Instance, i64)| instance)
-                        .collect() // extract the instances and ignore the player count
+                        .collect::<Vec<Instance>>()
+                        .into() // extract the instances and ignore the player count
                 })
                 .map(Json)
         }
