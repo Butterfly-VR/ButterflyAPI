@@ -18,7 +18,9 @@ pub async fn allocate_gameserver(
 
     let mut labels: BTreeMap<String, String> = BTreeMap::new();
     labels.insert("world".to_string(), world.to_string());
-    labels.insert(
+
+    let mut annotations: BTreeMap<String, String> = BTreeMap::new();
+    annotations.insert(
         "token".to_string(),
         serde_json::to_string(&instance_token.to_vec())?,
     );
@@ -33,13 +35,13 @@ pub async fn allocate_gameserver(
             scheduling: Some(SchedulingStrategy::Distributed),
             metadata: Some(MetadataPatch {
                 labels,
-                ..Default::default()
+                annotations,
             }),
             ..Default::default()
         },
     );
 
-    Api::all(client)
+    Api::namespaced(client, "default")
         .create(&PostParams::default(), &gameserver_allocation)
         .await?;
     Ok(())
@@ -69,8 +71,9 @@ pub async fn get_connect_token(
 ) -> Result<Vec<u8>, ConnectTokenRetrievalError> {
     let client = state.kube_client.clone();
 
-    let Some(gameserver): Option<GameServerAllocation> =
-        Api::all(client).get_opt(&id.to_string()).await?
+    let Some(gameserver): Option<GameServerAllocation> = Api::namespaced(client, "default")
+        .get_opt(&id.to_string())
+        .await?
     else {
         return Err(ConnectTokenRetrievalError::GameserverClosed);
     };
@@ -79,7 +82,7 @@ pub async fn get_connect_token(
         .spec
         .metadata
         .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?
-        .labels
+        .annotations
         .get("token")
         .map(String::as_str)
         .map(serde_json::from_str)

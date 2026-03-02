@@ -44,10 +44,15 @@ pub struct InstanceCreation {
     is_gameserver: bool,
 }
 
+#[derive(Serialize)]
+pub struct InstanceCreationResult {
+    id: Uuid,
+}
+
 pub async fn create_instance(
     State(state): State<Arc<AppState>>,
     Json(instance_details): Json<InstanceCreation>,
-) -> Result<(), ApiError> {
+) -> Result<Json<InstanceCreationResult>, ApiError> {
     let mut conn = state.pool.get().await?;
 
     let id = Uuid::new_v4();
@@ -78,7 +83,8 @@ pub async fn create_instance(
         instance_details.world,
         instance_details.is_gameserver,
     )
-    .await
+    .await?;
+    Ok(Json(InstanceCreationResult { id }))
 }
 
 #[derive(Deserialize)]
