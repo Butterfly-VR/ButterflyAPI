@@ -1,9 +1,7 @@
 use crate::ApiError;
 use crate::AppState;
 use crate::auth;
-use crate::gameserver_handler::ConnectTokenRetrievalError;
 use crate::gameserver_handler::allocate_gameserver;
-use crate::gameserver_handler::get_connect_token;
 use crate::models::*;
 use crate::schema::instances;
 use crate::schema::users;

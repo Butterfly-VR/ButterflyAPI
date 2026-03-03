@@ -11,7 +11,7 @@ use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::middleware;
-use axum::{Json, Router, routing::get};
+use axum::{Json, Router, routing::get, routing::post};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use std::sync::Arc;
@@ -22,6 +22,7 @@ const INSTANCE_API_ROUTE: &str = "/internal";
 const INSTANCE_CLOSE_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/close_instance");
 const INSTANCE_USER_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/user/{user_id}");
 const INSTANCE_OBJECT_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/object/{object_id}");
+const INSTANCE_CONNECT_TOKEN_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/{token}");
 
 pub async fn verify_instance_token() -> StatusCode {
     StatusCode::OK
@@ -126,6 +127,7 @@ pub fn instance_api_router(app_state: Arc<AppState>) -> Router {
         .route(INSTANCE_CLOSE_ROUTE, get(close_instance))
         .route(INSTANCE_USER_ROUTE, get(get_user))
         .route(INSTANCE_OBJECT_ROUTE, get(get_object))
+        .route(INSTANCE_CONNECT_TOKEN_ROUTE, post(set_next_connect_token))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth::check_instance_auth,
