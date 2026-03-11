@@ -28,13 +28,23 @@ pub async fn check_auth(
         .unwrap_or_default();
     if let Ok(Some(user_id)) = tokens
         .select(user)
-        .filter(token.eq(header_token))
+        .filter(token.eq(&header_token))
         .filter(expiry.gt(SystemTime::now()))
         .first::<Uuid>(&mut conn)
         .await
         .optional()
     {
         req.extensions_mut().insert(user_id);
+        return Ok(next.run(req).await);
+    }
+    if let Ok(Some(instance_id)) = instances::table
+        .select(instances::id)
+        .filter(instances::server_token.eq(&header_token))
+        .first::<Uuid>(&mut conn)
+        .await
+        .optional()
+    {
+        req.extensions_mut().insert(instance_id);
         return Ok(next.run(req).await);
     }
     Err(ApiError::WithCode(StatusCode::UNAUTHORIZED))

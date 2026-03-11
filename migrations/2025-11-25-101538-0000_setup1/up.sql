@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS "instances" (
 	"publicity" SMALLINT NOT NULL,
 	"anyone_can_invite" BOOLEAN NOT NULL,
 	"is_gameserver" BOOLEAN NOT NULL,
-	"last_used_client_token" BYTEA NOT NULL,
+	"client_token" BYTEA NOT NULL,
 	PRIMARY KEY("id")
 );
 

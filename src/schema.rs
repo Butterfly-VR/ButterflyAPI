@@ -11,7 +11,8 @@ diesel::table! {
         publicity -> Int2,
         anyone_can_invite -> Bool,
         is_gameserver -> Bool,
-        last_used_client_token -> Bytea,
+        client_token -> Bytea,
+        token_valid -> Bool,
     }
 }
 

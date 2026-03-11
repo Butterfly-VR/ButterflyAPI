@@ -22,9 +22,6 @@ use rand::rngs::OsRng;
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::time::sleep;
-use tracing::{info, warn};
 use uuid::Uuid;
 
 const INSTANCES_ROUTE: &str = "/instances";
@@ -67,7 +64,8 @@ pub async fn create_instance(
         publicity: instance_details.publicity,
         anyone_can_invite: instance_details.anyone_can_invite,
         is_gameserver: instance_details.is_gameserver,
-        last_used_client_token: [0_u8; 64].to_vec(),
+        client_token: [0_u8; 2048].to_vec(),
+        token_valid: false,
     };
 
     insert_into(instances::table)
@@ -184,20 +182,28 @@ pub async fn get_instance(
         .map(Json)
 }
 
+#[derive(Serialize)]
+pub struct InstanceJoinToken {
+    pub token: Vec<u8>,
+}
+
+impl From<Vec<u8>> for InstanceJoinToken {
+    fn from(value: Vec<u8>) -> Self {
+        Self { token: value }
+    }
+}
+
 pub async fn join_instance(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Vec<u8>>, ApiError> {
-    const DUPLICATE_TOKEN_RETRY_TIME: Duration = Duration::from_secs(1);
-    const MAX_RETY_ATTEMPTS: usize = 5;
-
+) -> Result<Json<InstanceJoinToken>, ApiError> {
     let mut conn = state.pool.get().await?;
-    let state = state.clone();
 
     conn.transaction(|mut conn| {
         async move {
             let Some(instance) = instances::table
                 .select(Instance::as_select())
+                .for_no_key_update()
                 .filter(instances::id.eq(id))
                 .first(&mut conn)
                 .await
@@ -205,37 +211,20 @@ pub async fn join_instance(
             else {
                 return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
             };
-            for _ in 0..MAX_RETY_ATTEMPTS {
-                match get_connect_token(state.clone(), id).await {
-                    Ok(token) => {
-                        if token == instance.last_used_client_token {
-                            info!(
-                                "got duplicate token, if this keeps happening we may need to rework this handling"
-                            );
-                            sleep(DUPLICATE_TOKEN_RETRY_TIME).await;
-                            continue;
-                        } else {
-                            return Ok(Json(token));
-                        }
-                    }
-                    Err(err) => match err {
-                        ConnectTokenRetrievalError::GameserverClosed => {
-                            return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
-                        }
-                        ConnectTokenRetrievalError::GameserverNotReady => {
-                            return Err(ApiError::WithCode(StatusCode::SERVICE_UNAVAILABLE));
-                        }
-                        ConnectTokenRetrievalError::Generic(err) => return Err(err),
-                    },
-                }
+            if !instance.token_valid {
+                return Err(ApiError::WithCode(StatusCode::ACCEPTED));
             }
-            // must of hit max reties?
-            warn!("ran out of attempts retriving connect token");
-            Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))
+            diesel::update(instances::table.find(id))
+                .set(instances::token_valid.eq(false))
+                .execute(&mut conn)
+                .await?;
+            Ok(instance.client_token)
         }
         .scope_boxed()
     })
     .await
+    .map(InstanceJoinToken::from)
+    .map(Json)
 }
 
 pub fn instances_router(app_state: Arc<AppState>) -> Router {

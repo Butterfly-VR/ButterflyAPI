@@ -14,6 +14,7 @@ use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
+use serde::Deserialize;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use uuid::Uuid;
@@ -22,7 +23,7 @@ const INSTANCE_API_ROUTE: &str = "/internal";
 const INSTANCE_CLOSE_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/close_instance");
 const INSTANCE_USER_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/user/{user_id}");
 const INSTANCE_OBJECT_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/object/{object_id}");
-const INSTANCE_CONNECT_TOKEN_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/{token}");
+const INSTANCE_CONNECT_TOKEN_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/token");
 
 pub async fn verify_instance_token() -> StatusCode {
     StatusCode::OK
@@ -120,6 +121,31 @@ pub async fn get_object(
         tags,
     }))
 }
+
+#[derive(Deserialize)]
+pub struct ConnectTokenSetRequest {
+    pub client_token: Vec<u8>,
+}
+
+pub async fn set_next_connect_token(
+    State(state): State<Arc<AppState>>,
+    Extension(id): Extension<Uuid>,
+    Json(connect_token_set_request): Json<ConnectTokenSetRequest>,
+) -> Result<(), ApiError> {
+    let mut conn = state.pool.get().await?;
+
+    diesel::update(instances::table.find(id))
+        .set((
+            instances::client_token.eq(connect_token_set_request.client_token),
+            instances::token_valid.eq(true),
+        ))
+        .execute(&mut conn)
+        .await?;
+
+    Ok(())
+}
+
+// todo: function for checking if a new token is unexpectedly needed (because someone requested a token but never joined)
 
 pub fn instance_api_router(app_state: Arc<AppState>) -> Router {
     Router::new()

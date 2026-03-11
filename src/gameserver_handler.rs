@@ -1,6 +1,5 @@
 use crate::kube_resources::*;
 use crate::{ApiError, AppState};
-use axum::http::StatusCode;
 use kube::Api;
 use kube::api::PostParams;
 use std::collections::BTreeMap;
@@ -20,10 +19,7 @@ pub async fn allocate_gameserver(
     labels.insert("world".to_string(), world.to_string());
 
     let mut annotations: BTreeMap<String, String> = BTreeMap::new();
-    annotations.insert(
-        "token".to_string(),
-        serde_json::to_string(&instance_token.to_vec())?,
-    );
+    annotations.insert("token".to_string(), hex::encode(instance_token));
 
     let gameserver_allocation = GameServerAllocation::new(
         &id.to_string(),

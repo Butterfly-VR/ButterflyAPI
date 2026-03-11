@@ -138,5 +138,6 @@ pub struct Instance {
     pub anyone_can_invite: bool,
     pub is_gameserver: bool,
     #[serde(skip_serializing)]
-    pub last_used_client_token: Vec<u8>,
+    pub client_token: Vec<u8>,
+    pub token_valid: bool,
 }
