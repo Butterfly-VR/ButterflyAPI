@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;
 
-use crate::schema::*;
+use crate::schema::{instances, licenses, objects, tags, tokens, unverified_users, users};
 
 // diesel dosent like enums so we dont define these on db
 #[derive(Deserialize, Clone, Copy)]
@@ -89,7 +89,7 @@ pub struct PublicUserInfo {
 
 impl From<User> for PublicUserInfo {
     fn from(value: User) -> Self {
-        PublicUserInfo {
+        Self {
             id: value.id,
             username: value.username,
             homeworld: value.homeworld,

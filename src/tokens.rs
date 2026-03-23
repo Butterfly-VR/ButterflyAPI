@@ -5,9 +5,9 @@ use crate::ErrorInfo;
 use crate::auth::check_auth;
 use crate::email::check_email;
 use crate::hash::hash_password;
-use crate::models::*;
-use crate::schema::tokens::dsl::*;
-use crate::schema::users::dsl::*;
+use crate::models::{PublicUserInfo, Token, User};
+use crate::schema::tokens::dsl::tokens;
+use crate::schema::users::dsl::{email, id, users};
 use axum::Extension;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -48,6 +48,8 @@ pub struct SignInResponse {
     renewable: bool,
 }
 
+// extremely unlikely that we will ever need a token to expire before the epoch
+#[allow(clippy::fallible_impl_from)]
 impl From<Token> for SignInResponse {
     fn from(value: Token) -> Self {
         Self {
@@ -183,22 +185,21 @@ pub async fn get_user(
 ) -> Result<Json<PublicUserInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
 
-    if let Ok(u) = users
+    users
         .select(PublicUserInfo::as_select())
         .filter(id.eq(user_id.0))
         .first(&mut conn)
         .await
-    {
-        Ok(Json(u))
-    } else {
-        Err(ApiError::WithResponse(
-            StatusCode::NOT_FOUND,
-            Json(ErrorInfo {
-                error_code: ErrorCode::DosentExist,
-                error_message: None,
-            }),
-        ))
-    }
+        .map(Json)
+        .map_err(|_| {
+            ApiError::WithResponse(
+                StatusCode::NOT_FOUND,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::DosentExist,
+                    error_message: None,
+                }),
+            )
+        })
 }
 
 pub fn tokens_router(app_state: Arc<AppState>) -> Router {

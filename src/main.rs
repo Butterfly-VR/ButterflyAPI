@@ -1,3 +1,5 @@
+#![warn(clippy::all, clippy::pedantic, clippy::nursery)]
+
 use crate::hash::HASHER_MEMORY;
 use axum::Json;
 use axum::http::StatusCode;

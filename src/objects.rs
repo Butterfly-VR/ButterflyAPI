@@ -4,7 +4,7 @@ use crate::ErrorCode;
 use crate::ErrorInfo;
 use crate::auth::check_auth;
 use crate::models;
-use crate::models::*;
+use crate::models::{Object, ObjectType};
 use crate::schema::licenses;
 use crate::schema::objects;
 use crate::schema::tags;
@@ -22,7 +22,6 @@ use diesel::prelude::*;
 use diesel_async::AsyncConnection;
 use diesel_async::RunQueryDsl;
 use diesel_async::scoped_futures::ScopedFutureExt;
-
 use futures_util::TryStreamExt;
 use serde::Deserialize;
 use serde::Serialize;
@@ -69,15 +68,14 @@ pub async fn create_or_update_object(
         ));
     }
 
-    for tag in json.tags.iter() {
+    for tag in &json.tags {
         if tag.len() < 3 || tag.len() > 32 {
             return Err(ApiError::WithResponse(
                 StatusCode::BAD_REQUEST,
                 Json(ErrorInfo {
                     error_code: ErrorCode::BadRequestLength,
                     error_message: Some(format!(
-                        "Tag {:?} was wrong length. This shouldnt happen",
-                        tag
+                        "Tag {tag} was wrong length. This shouldnt happen",
                     )),
                 }),
             ));
@@ -173,22 +171,21 @@ pub async fn create_or_update_object(
                     ));
                 }
 
-                let license: i32;
-                if let Some(license_number) = licenses::table
+                let license = if let Some(license_number) = licenses::table
                     .select(licenses::license)
                     .filter(licenses::text.eq(&json.license))
                     .first::<i32>(&mut conn)
                     .await
                     .optional()?
                 {
-                    license = license_number;
+                    license_number
                 } else {
-                    license = insert_into(licenses::table)
+                    insert_into(licenses::table)
                         .values(licenses::text.eq(&json.license))
                         .returning(licenses::license)
                         .get_result(&mut conn)
-                        .await?;
-                }
+                        .await?
+                };
 
                 let object: Object = Object {
                     id: object_id,
@@ -273,7 +270,7 @@ pub async fn get_object_info(
             flags: object
                 .flags
                 .iter()
-                .map(|x| if let Some(x) = x { *x } else { false })
+                .map(|x| x.unwrap_or(false))
                 .collect::<Vec<bool>>(),
             updated_at: object
                 .updated_at
@@ -565,8 +562,8 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     let mut parts: Vec<aws_sdk_s3::types::CompletedPart> = vec![];
 
     for chunk in first_chunk.chunks_exact(CHUNK_SIZE) {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         let part_number = parts.len() as i32 + 1;
-
         let part = client
             .upload_part()
             .bucket(bucket)
@@ -606,6 +603,7 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
             break;
         }
 
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         let part_number = parts.len() as i32 + 1;
 
         let part = client
@@ -671,5 +669,5 @@ pub fn objects_router(app_state: Arc<AppState>) -> Router {
             app_state.clone(),
             check_auth,
         ))
-        .with_state(app_state.clone())
+        .with_state(app_state)
 }

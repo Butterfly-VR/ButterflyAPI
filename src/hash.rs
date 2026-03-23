@@ -20,6 +20,8 @@ static HASHER_PARAMETERS: Result<argon2::Params, argon2::Error> = argon2::Params
     Some(HASHER_OUTPUT_LEN as usize),
 );
 
+// not sure what clippy wants here, the lock is dropped basically as soon as possible
+#[allow(clippy::significant_drop_tightening)]
 pub async fn hash_password(
     state: Arc<AppState>,
     pwd: [u8; 64],
@@ -27,7 +29,7 @@ pub async fn hash_password(
 ) -> Result<Vec<u8>, ()> {
     spawn_blocking(move || {
         let mut block = None;
-        for lock in state.hasher_memory.iter() {
+        for lock in &state.hasher_memory {
             if let Ok(b) = lock.try_lock() {
                 block = Some(b);
                 break;

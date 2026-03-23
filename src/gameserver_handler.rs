@@ -1,4 +1,7 @@
-use crate::kube_resources::*;
+use crate::kube_resources::{
+    GameServerAllocation, GameServerAllocationSpec, GameServerSelector, GameServerState,
+    MetadataPatch, SchedulingStrategy,
+};
 use crate::{ApiError, AppState};
 use kube::Api;
 use kube::api::PostParams;

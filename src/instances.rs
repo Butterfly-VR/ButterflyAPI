@@ -2,7 +2,7 @@ use crate::ApiError;
 use crate::AppState;
 use crate::auth;
 use crate::gameserver_handler::allocate_gameserver;
-use crate::models::*;
+use crate::models::Instance;
 use crate::schema::instances;
 use crate::schema::users;
 use axum::extract::Path;
@@ -101,7 +101,7 @@ pub struct InstanceSearchResult {
 
 impl From<Vec<Instance>> for InstanceSearchResult {
     fn from(instances: Vec<Instance>) -> Self {
-        InstanceSearchResult { instances }
+        Self { instances }
     }
 }
 

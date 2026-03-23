@@ -8,7 +8,7 @@ use axum::{
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use schema::tokens::dsl::*;
+use schema::tokens::dsl::{expiry, token, tokens, user};
 use std::{sync::Arc, time::SystemTime};
 use uuid::Uuid;
 

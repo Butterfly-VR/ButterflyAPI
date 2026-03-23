@@ -7,7 +7,7 @@ use crate::email::EmailType;
 use crate::email::check_email;
 use crate::email::send_email;
 use crate::hash::hash_password;
-use crate::models::*;
+use crate::models::{PublicUserInfo, UnverifiedUser, User};
 use crate::schema::unverified_users;
 use crate::schema::users;
 use axum::Extension;
@@ -155,34 +155,33 @@ pub enum GetUserResult {
 impl IntoResponse for GetUserResult {
     fn into_response(self) -> axum::response::Response {
         match self {
-            GetUserResult::PublicUser(user) => user.into_response(),
-            GetUserResult::User(user) => user.into_response(),
+            Self::PublicUser(user) => user.into_response(),
+            Self::User(user) => user.into_response(),
         }
     }
 }
 
 pub async fn get_user(
     State(state): State<Arc<AppState>>,
-    Path(usr_id): Path<Uuid>,
-    Extension(user_id): Extension<Uuid>,
+    Path(target_user): Path<Uuid>,
+    Extension(requesting_user): Extension<Uuid>,
 ) -> Result<GetUserResult, ApiError> {
     let mut conn = state.pool.get().await?;
 
     if let Ok(Some(mut user)) = users::table
         .select(User::as_select())
-        .filter(users::id.eq(usr_id))
+        .filter(users::id.eq(target_user))
         .first(&mut conn)
         .await
         .optional()
     {
-        if user_id == user.id {
+        if requesting_user == user.id {
             // todo: this is kinda jank
             user.homeworld = Some(user.homeworld.unwrap_or(Uuid::nil()));
             user.avatar = Some(user.avatar.unwrap_or(Uuid::from_u64_pair(0, 1))); // yeah thats not hacky at all
             return Ok(GetUserResult::User(Json(user)));
-        } else {
-            return Ok(GetUserResult::PublicUser(Json(user.into())));
         }
+        return Ok(GetUserResult::PublicUser(Json(user.into())));
     }
     Err(ApiError::WithResponse(
         StatusCode::NOT_FOUND,

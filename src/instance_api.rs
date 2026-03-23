@@ -1,7 +1,7 @@
 use crate::ApiError;
 use crate::AppState;
 use crate::auth;
-use crate::models::*;
+use crate::models::{Object, PublicUserInfo};
 use crate::schema::instances;
 use crate::schema::objects;
 use crate::schema::tags;
@@ -75,7 +75,7 @@ pub async fn get_object(
 ) -> Result<Json<crate::objects::ObjectInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
 
-    let object = objects::table
+    let object: Option<Object> = objects::table
         .select(Object::as_select())
         .filter(objects::id.eq(object_id))
         .first(&mut conn)
@@ -98,7 +98,7 @@ pub async fn get_object(
         flags: object
             .flags
             .iter()
-            .map(|x| if let Some(x) = x { *x } else { false })
+            .map(|x| x.unwrap_or(false))
             .collect::<Vec<bool>>(),
         updated_at: object
             .updated_at

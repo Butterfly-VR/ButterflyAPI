@@ -28,7 +28,7 @@ pub struct ShortObject {
 
 impl From<(Uuid, String)> for ShortObject {
     fn from((id, name): (Uuid, String)) -> Self {
-        ShortObject { id, name }
+        Self { id, name }
     }
 }
 
@@ -68,7 +68,7 @@ pub enum Filter {
 fn parse_filters(filters_map: HashMap<&str, &str>) -> Vec<Filter> {
     let mut filters = Vec::with_capacity(filters_map.len());
 
-    for filter in filters_map.into_iter() {
+    for filter in filters_map {
         match filter {
             ("is", type_str) => match type_str {
                 "user" => filters.push(Filter::Is(FilterObjectTypes::User)),
@@ -104,22 +104,16 @@ pub async fn search(
     Path(query): Path<String>,
 ) -> Result<Json<SearchResult>, ApiError> {
     // todo: replace unwraps with error handling
-    dbg!(&query);
     let (term, filters) = query
         .split_once('&')
         .ok_or(ApiError::WithCode(StatusCode::BAD_REQUEST))?;
 
-    let filters = filters
-        .split(',')
-        .filter(|x| !x.is_empty())
-        .collect::<Vec<&str>>();
+    let filters = filters.split(',').filter(|x| !x.is_empty());
 
     let filters: HashMap<&str, &str> = filters
         .into_iter()
-        .filter_map(|x| x.split_once(":"))
+        .filter_map(|x| x.split_once(':'))
         .collect();
-
-    dbg!(&filters);
 
     let filters = parse_filters(filters);
 
@@ -131,7 +125,7 @@ pub async fn search(
         avatars: None,
     };
 
-    for filter in filters.iter() {
+    for filter in &filters {
         match filter {
             Filter::Is(FilterObjectTypes::User) => {
                 search_result.users = Some(search_users(&filters, term, &mut conn).await);
@@ -164,17 +158,15 @@ pub async fn search_objects(
     let mut query = objects::table
         .select((objects::id, objects::name))
         .distinct_on(objects::id)
-        .filter(objects::name.like(format!("%{}%", search_term)))
-        .or_filter(objects::description.like(format!("%{}%", search_term)))
+        .filter(objects::name.like(format!("%{search_term}%")))
+        .or_filter(objects::description.like(format!("%{search_term}%")))
         .left_join(tags::table)
         .or_filter(tags::tag.eq(search_term))
         .inner_join(users::table.on(users::id.eq(objects::creator)))
-        .or_filter(users::username.like(format!("%{}%", search_term)))
+        .or_filter(users::username.like(format!("%{search_term}%")))
         .filter(objects::object_type.eq(object_type as i16))
         .limit(500)
         .into_boxed();
-
-    dbg!(&filters);
 
     for filter in filters {
         match filter {
@@ -198,7 +190,7 @@ pub async fn search_objects(
         .await
         .unwrap()
         .into_iter()
-        .map(|x| x.into())
+        .map(ShortObject::from)
         .collect()
 }
 
@@ -210,7 +202,7 @@ pub async fn search_users(
     let mut query = users::table
         .select(PublicUserInfo::as_select())
         .distinct_on(users::id)
-        .filter(users::username.like(format!("%{}%", search_term)))
+        .filter(users::username.like(format!("%{search_term}%")))
         .limit(100)
         .into_boxed();
     for filter in filters {

@@ -3,7 +3,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// GameServerAllocation is used to allocate a GameServer from a pool of available GameServers.
+/// Used to allocate a `GameServer` from a pool of available `GameServers`.
 #[derive(CustomResource, Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[kube(
     group = "allocation.agones.dev",
@@ -27,7 +27,7 @@ pub struct GameServerAllocationSpec {
     pub lists: BTreeMap<String, ListAction>,
 }
 
-/// Selector for filtering GameServers.
+/// Selector for filtering `GameServers`.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GameServerSelector {
@@ -45,7 +45,7 @@ pub struct GameServerSelector {
     pub players: Option<PlayerSelector>,
 }
 
-/// A label selector requirement is a selector that contains values, a key, and an operator.
+/// A selector that contains values, a key, and an operator.
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LabelSelectorRequirement {
@@ -121,6 +121,7 @@ pub struct MetadataPatch {
 #[serde(rename_all = "camelCase")]
 pub struct Priority {
     #[serde(rename = "type")]
+    #[allow(clippy::struct_field_names)]
     pub priority_type: PriorityType,
     pub key: String,
     pub order: PriorityOrder,
