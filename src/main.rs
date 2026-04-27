@@ -30,6 +30,7 @@ mod users;
 use std::net::SocketAddr;
 
 const ROUTE_ORIGIN: &str = "/api/v0";
+const COFFEE_ORIGIN: &str = "/api/v0/coffee";
 
 // argon2 needs to allocate a lot of memory for hashing,
 // since allocating at runtime is slow and could cause ooms
@@ -116,6 +117,7 @@ async fn main() {
 
     let app = Router::new()
         .route(ROUTE_ORIGIN, get(|| async { http::StatusCode::OK }))
+        .route(COFFEE_ORIGIN, get(|| async { http::StatusCode::IM_A_TEAPOT }))
         .nest(ROUTE_ORIGIN, users::users_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, tokens::tokens_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, objects::objects_router(app_state.clone()))
