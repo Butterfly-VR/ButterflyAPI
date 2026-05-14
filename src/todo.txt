@@ -1,0 +1,11 @@
+1. hourly login limit (~5)
+2. user content size limits (100mb, more for supporter accounts)
+3. upload / download(?) limits per user (~50GB up 150GB down per month)
+4. overall rate limit per user per instance (~5000 per hour)
+5. cache control headers on everything
+6. cache user uploads
+7. track total visits, likes, recent visits, for popular, liked, trending respectively
+8. some kind of random selection for discovery (curated random) / random
+
+if can figure out ips:
+1. per ip account creation limit (10 per year)
