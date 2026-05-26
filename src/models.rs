@@ -60,6 +60,7 @@ pub struct User {
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
     pub instance: Option<Uuid>,
+    pub identifier: Option<Vec<u8>>,
 }
 
 #[derive(Queryable, Selectable, Insertable, Serialize)]
@@ -124,12 +125,11 @@ pub struct Tag {
     pub tag: String,
 }
 
-#[derive(Queryable, Serialize, Selectable, Associations, Insertable)]
+#[derive(Queryable, Selectable, Associations, Insertable)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 #[diesel(belongs_to(Object, foreign_key = world))]
 pub struct Instance {
     pub id: Uuid,
-    #[serde(skip_serializing)]
     pub server_token: Vec<u8>,
     pub world: Uuid,
     pub name: String,
@@ -137,7 +137,6 @@ pub struct Instance {
     pub publicity: i16,
     pub anyone_can_invite: bool,
     pub is_gameserver: bool,
-    #[serde(skip_serializing)]
-    pub client_token: Vec<u8>,
-    pub token_valid: bool,
+    pub ip: ipnet::IpNet,
+    pub port: i32,
 }

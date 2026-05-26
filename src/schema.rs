@@ -11,8 +11,8 @@ diesel::table! {
         publicity -> Int2,
         anyone_can_invite -> Bool,
         is_gameserver -> Bool,
-        client_token -> Bytea,
-        token_valid -> Bool,
+        ip -> Inet,
+        port -> Int4,
     }
 }
 
@@ -91,6 +91,7 @@ diesel::table! {
         homeworld -> Nullable<Uuid>,
         avatar -> Nullable<Uuid>,
         instance -> Nullable<Uuid>,
+        identifier -> Nullable<Bytea>,
     }
 }
 

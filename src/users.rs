@@ -229,6 +229,7 @@ pub async fn verify_email(
                         homeworld: None,
                         avatar: None,
                         instance: None,
+                        identifier: None,
                     };
                     insert_into(users::table)
                         .values(new_user)

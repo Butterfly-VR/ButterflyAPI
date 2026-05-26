@@ -55,6 +55,15 @@ pub async fn create_instance(
     let mut instance_token: [u8; 64] = [0; 64];
     OsRng.try_fill_bytes(&mut instance_token)?;
 
+    allocate_gameserver(
+        state.clone(),
+        id,
+        instance_token,
+        instance_details.world,
+        instance_details.is_gameserver,
+    )
+    .await?;
+
     let instance: Instance = Instance {
         id,
         server_token: instance_token.to_vec(),
@@ -64,22 +73,13 @@ pub async fn create_instance(
         publicity: instance_details.publicity,
         anyone_can_invite: instance_details.anyone_can_invite,
         is_gameserver: instance_details.is_gameserver,
-        client_token: [0_u8; 2048].to_vec(),
-        token_valid: false,
     };
 
     insert_into(instances::table)
         .values(instance)
         .execute(&mut conn)
         .await?;
-    allocate_gameserver(
-        state.clone(),
-        id,
-        instance_token,
-        instance_details.world,
-        instance_details.is_gameserver,
-    )
-    .await?;
+
     Ok(Json(InstanceCreationResult { id }))
 }
 
