@@ -5,6 +5,7 @@ use crate::gameserver_handler::allocate_gameserver;
 use crate::models::Instance;
 use crate::schema::instances;
 use crate::schema::users;
+use axum::Extension;
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -236,6 +237,7 @@ impl From<[u8; 8]> for InstanceIdentifier {
 pub async fn join_instance(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
+    Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<InstanceIdentifier>, ApiError> {
     let mut conn = state.pool.get().await?;
 
@@ -256,6 +258,14 @@ pub async fn join_instance(
 
             let mut identifier = [0u8; 8];
             OsRng.try_fill_bytes(&mut identifier)?;
+
+            diesel::update(users::table.find(user_id))
+                .set((
+                    users::instance.eq(instance.id),
+                    users::identifier.eq(identifier),
+                ))
+                .execute(&mut conn)
+                .await?;
 
             Ok(identifier)
         }

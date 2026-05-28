@@ -1,1 +1,4 @@
-ALTER TABLE instances DROP COLUMN TOKEN_VALID;
+ALTER TABLE instances ADD COLUMN "client_token" BYTEA NOT NULL;
+ALTER TABLE instances DROP COLUMN "ip";
+ALTER TABLE instances DROP COLUMN "port";
+ALTER TABLE users DROP COLUMN "identifier" CASCADE;

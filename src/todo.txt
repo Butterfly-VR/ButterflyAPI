@@ -11,8 +11,8 @@ figured out ips use the taefik header thing
 8. per ip hourly login limit (~5) success or fail
 
 9. respect content privacy
-10. friend api
+10. moderation api
 
 11. timestamp db entries created / modified
 
-12. moderation api
+12. friend api

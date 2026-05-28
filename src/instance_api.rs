@@ -14,6 +14,8 @@ use axum::middleware;
 use axum::{Json, Router, routing::get};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
+use serde::Deserialize;
+use serde::Serialize;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use uuid::Uuid;
@@ -22,6 +24,8 @@ const INSTANCE_API_ROUTE: &str = "/internal";
 const INSTANCE_CLOSE_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/close_instance");
 const INSTANCE_USER_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/user/{user_id}");
 const INSTANCE_OBJECT_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/object/{object_id}");
+const INSTANCE_IDENTIFIER_VERIFY_ROUTE: &str =
+    constcat::concat!(INSTANCE_API_ROUTE, "/verify_identifier/{identifier}");
 
 pub async fn verify_instance_token() -> StatusCode {
     StatusCode::OK
@@ -120,12 +124,31 @@ pub async fn get_object(
     }))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct VerifyIdentifierResponse {
+    user_id: Uuid,
+}
+
+async fn verify_identifier(
+    Path(identifier): Path<[u8; 8]>,
+    State(app_state): State<Arc<AppState>>,
+) -> Result<Json<VerifyIdentifierResponse>, ApiError> {
+    let mut conn = app_state.pool.get().await?;
+    let user_id = users::table
+        .select(users::id)
+        .filter(users::identifier.eq(&identifier))
+        .first(&mut conn)
+        .await?;
+    Ok(Json(VerifyIdentifierResponse { user_id }))
+}
+
 pub fn instance_api_router(app_state: Arc<AppState>) -> Router {
     Router::new()
         .route(INSTANCE_API_ROUTE, get(verify_instance_token))
         .route(INSTANCE_CLOSE_ROUTE, get(close_instance))
         .route(INSTANCE_USER_ROUTE, get(get_user))
         .route(INSTANCE_OBJECT_ROUTE, get(get_object))
+        .route(INSTANCE_IDENTIFIER_VERIFY_ROUTE, get(verify_identifier))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth::check_instance_auth,
