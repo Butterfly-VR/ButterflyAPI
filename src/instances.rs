@@ -55,7 +55,7 @@ pub async fn create_instance(
     let mut instance_token: [u8; 64] = [0; 64];
     OsRng.try_fill_bytes(&mut instance_token)?;
 
-    allocate_gameserver(
+    let addr = allocate_gameserver(
         state.clone(),
         id,
         instance_token,
@@ -73,6 +73,8 @@ pub async fn create_instance(
         publicity: instance_details.publicity,
         anyone_can_invite: instance_details.anyone_can_invite,
         is_gameserver: instance_details.is_gameserver,
+        ip: addr.ip().into(),
+        port: addr.port().into(),
     };
 
     insert_into(instances::table)
@@ -96,11 +98,40 @@ pub struct InstanceSearch {
 
 #[derive(Serialize)]
 pub struct InstanceSearchResult {
-    instances: Vec<Instance>,
+    instances: Vec<InstanceInfo>,
 }
 
-impl From<Vec<Instance>> for InstanceSearchResult {
-    fn from(instances: Vec<Instance>) -> Self {
+#[derive(Serialize)]
+pub struct InstanceInfo {
+    pub id: Uuid,
+    pub world: Uuid,
+    pub name: String,
+    pub max_players: i16,
+    pub publicity: i16,
+    pub anyone_can_invite: bool,
+    pub is_gameserver: bool,
+    pub ip: String,
+    pub port: u16,
+}
+
+impl From<Instance> for InstanceInfo {
+    fn from(instance: Instance) -> Self {
+        Self {
+            id: instance.id,
+            world: instance.world,
+            name: instance.name,
+            max_players: instance.max_players,
+            publicity: instance.publicity,
+            anyone_can_invite: instance.anyone_can_invite,
+            is_gameserver: instance.is_gameserver,
+            ip: instance.ip.to_string(),
+            port: instance.port.try_into().unwrap_or_default(),
+        }
+    }
+}
+
+impl From<Vec<InstanceInfo>> for InstanceSearchResult {
+    fn from(instances: Vec<InstanceInfo>) -> Self {
         Self { instances }
     }
 }
@@ -157,8 +188,8 @@ pub async fn search_instances(
                 .map_err(ApiError::from)
                 .map(|x| {
                     x.into_iter()
-                        .map(|(instance, _): (Instance, i64)| instance)
-                        .collect::<Vec<Instance>>()
+                        .map(|(instance, _): (Instance, i64)| instance.into())
+                        .collect::<Vec<InstanceInfo>>()
                         .into() // extract the instances and ignore the player count
                 })
                 .map(Json)
@@ -171,7 +202,7 @@ pub async fn search_instances(
 pub async fn get_instance(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Instance>, ApiError> {
+) -> Result<Json<InstanceInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
     instances::table
         .select(Instance::as_select())
@@ -179,24 +210,33 @@ pub async fn get_instance(
         .first::<Instance>(&mut conn)
         .await
         .map_err(ApiError::from)
+        .map(|instance| instance.into())
         .map(Json)
 }
 
 #[derive(Serialize)]
-pub struct InstanceJoinToken {
-    pub token: Vec<u8>,
+pub struct InstanceIdentifier {
+    pub identifier: Vec<u8>,
 }
 
-impl From<Vec<u8>> for InstanceJoinToken {
+impl From<Vec<u8>> for InstanceIdentifier {
     fn from(value: Vec<u8>) -> Self {
-        Self { token: value }
+        Self { identifier: value }
+    }
+}
+
+impl From<[u8; 8]> for InstanceIdentifier {
+    fn from(value: [u8; 8]) -> Self {
+        Self {
+            identifier: value.to_vec(),
+        }
     }
 }
 
 pub async fn join_instance(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<Json<InstanceJoinToken>, ApiError> {
+) -> Result<Json<InstanceIdentifier>, ApiError> {
     let mut conn = state.pool.get().await?;
 
     conn.transaction(|mut conn| {
@@ -211,19 +251,18 @@ pub async fn join_instance(
             else {
                 return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
             };
-            if !instance.token_valid {
-                return Err(ApiError::WithCode(StatusCode::ACCEPTED));
-            }
-            diesel::update(instances::table.find(id))
-                .set(instances::token_valid.eq(false))
-                .execute(&mut conn)
-                .await?;
-            Ok(instance.client_token)
+
+            // todo: check for instance privacy, blocks, etc
+
+            let mut identifier = [0u8; 8];
+            OsRng.try_fill_bytes(&mut identifier)?;
+
+            Ok(identifier)
         }
         .scope_boxed()
     })
     .await
-    .map(InstanceJoinToken::from)
+    .map(InstanceIdentifier::from)
     .map(Json)
 }
 

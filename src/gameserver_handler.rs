@@ -3,9 +3,11 @@ use crate::kube_resources::{
     MetadataPatch, SchedulingStrategy,
 };
 use crate::{ApiError, AppState};
+use axum::http::StatusCode;
 use kube::Api;
 use kube::api::PostParams;
 use std::collections::BTreeMap;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -15,7 +17,7 @@ pub async fn allocate_gameserver(
     instance_token: [u8; 64],
     world: Uuid,
     _dedicated_gameserver: bool,
-) -> Result<(), ApiError> {
+) -> Result<SocketAddr, ApiError> {
     let client = state.kube_client.clone();
 
     let mut labels: BTreeMap<String, String> = BTreeMap::new();
@@ -40,8 +42,24 @@ pub async fn allocate_gameserver(
         },
     );
 
-    Api::namespaced(client, "default")
+    let allocation = Api::namespaced(client.clone(), "default")
         .create(&PostParams::default(), &gameserver_allocation)
         .await?;
-    Ok(())
+
+    let Some((ip, port)) = allocation
+        .status
+        .map(|x| (x.address, x.ports.get(0).map(|x| x.port)))
+    else {
+        return Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR));
+    };
+
+    let ip = ip
+        .and_then(|x| x.parse::<Ipv4Addr>().ok())
+        .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    let port = port
+        .and_then(|x| x.try_into().ok())
+        .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    Ok(SocketAddr::new(ip.into(), port))
 }

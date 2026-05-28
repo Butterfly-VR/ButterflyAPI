@@ -9,7 +9,8 @@ use std::collections::BTreeMap;
     group = "allocation.agones.dev",
     version = "v1",
     kind = "GameServerAllocation",
-    namespaced
+    namespaced,
+    status = "GameServerAllocationStatus"
 )]
 #[serde(rename_all = "camelCase")]
 pub struct GameServerAllocationSpec {
@@ -165,4 +166,89 @@ pub struct ListAction {
     pub capacity: Option<i64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub delete_values: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GameServerAllocationStatus {
+    /// Current state of the allocation (e.g. Allocated or UnAllocated).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<GameServerAllocationState>,
+    /// Name of the game server attached to this allocation when state is Allocated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_server_name: Option<String>,
+    /// List of ports the game server makes available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ports: Vec<GameServerStatusPort>,
+    /// Primary network address where the game server can be reached.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    /// All network addresses where the game server can be reached (copy of Node.Status.addresses).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub addresses: Vec<NodeAddress>,
+    /// Name of the node the game server is running on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_name: Option<String>,
+    /// "local" for local allocations, or the remote agones-allocator endpoint for multi-cluster allocations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Labels and annotations of the game server at allocation time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<GameServerAllocationMetadata>,
+    /// Map of CounterStatus at allocation time (Beta, "CountsAndLists" feature flag).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub counters: BTreeMap<String, CounterStatus>,
+    /// Map of ListStatus at allocation time (Beta, "CountsAndLists" feature flag).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub lists: BTreeMap<String, ListStatus>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, JsonSchema)]
+pub enum GameServerAllocationState {
+    Allocated,
+    UnAllocated,
+}
+
+/// A port exposed by an allocated game server.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GameServerStatusPort {
+    pub name: String,
+    pub port: i32,
+}
+
+/// A single network address entry from Node.Status.addresses.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeAddress {
+    #[serde(rename = "type")]
+    pub address_type: String,
+    pub address: String,
+}
+
+/// Labels and annotations of the game server captured at allocation time.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GameServerAllocationMetadata {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub labels: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub annotations: BTreeMap<String, String>,
+}
+
+/// Status of a counter at allocation time.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CounterStatus {
+    pub count: i64,
+    pub capacity: i64,
+}
+
+/// Status of a list at allocation time.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ListStatus {
+    pub capacity: i64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<String>,
 }

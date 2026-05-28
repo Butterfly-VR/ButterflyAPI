@@ -1,6 +1,5 @@
 1. working instance api
 
-divide by instance count for consistency without db
 2. user content size limits (100mb, more for supporter accounts)
 3. upload / download(?) limits per user (~50GB up 150GB down per month)
 4. overall rate limit per user (~5000 per hour)
@@ -11,8 +10,9 @@ figured out ips use the taefik header thing
 7. per ip account creation limit (10 per year)
 8. per ip hourly login limit (~5) success or fail
 
-9. password resets
-10. respect content privacy
+9. respect content privacy
+10. friend api
 
-11. track total visits, likes, recent visits, for most popular, most liked, trending respectively
-12. some kind of random selection for discovery (curated random) / random
+11. timestamp db entries created / modified
+
+12. moderation api
