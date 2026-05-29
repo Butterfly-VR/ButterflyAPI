@@ -48,7 +48,7 @@ pub async fn allocate_gameserver(
 
     let Some((ip, port)) = allocation
         .status
-        .map(|x| (x.address, x.ports.get(0).map(|x| x.port)))
+        .map(|x| (x.address, x.ports.first().map(|x| x.port)))
     else {
         return Err(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR));
     };

@@ -17,14 +17,14 @@ kube = { version = "3.1.0", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.27.1", features = ["latest", "schemars"] }
 schemars = { version = "1" }
 argon2 = "0.5.3"
-aws-config = { version = "1.8.16", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1.132.0"
+aws-config = { version = "1.8.17", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.134.0"
 axum = {version = "0.8.9", features = ["macros", "ws"]}
 bb8 = "0.9.1"
 bytes = "1.11.1"
 constcat = "0.6.1"
 diesel = {version = "2.3.9", features = ["postgres", "uuid", "ipnet-address"] }
-diesel-async = { version = "0.7.4", features = ["postgres", "bb8", "pool"] }
+diesel-async = { version = "0.9.0", features = ["postgres", "bb8", "pool"] }
 dotenvy = "0.15.7"
 futures-util = "0.3.32"
 hex = "0.4.3"
@@ -37,12 +37,12 @@ thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread"] }
 tokio-util = "0.7.18"
 tower = "0.5.3"
-tower-http = { version = "0.6.10", features = ["trace"]}
+tower-http = { version = "0.6.11", features = ["trace"]}
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 uuid = { version = "1.23.1", features = ["v4", "serde"]}
-rand = "0.9.4"
-serde_json = "1.0.149"
+rand = "0.10.1"
+serde_json = "1.0.150"
 aws-lc-rs = "1.17.0"
 rustls = "0.23.40"
 ipnet = "2.12.0"

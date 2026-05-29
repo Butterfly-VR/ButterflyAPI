@@ -16,10 +16,9 @@ use diesel::dsl::sql;
 use diesel::insert_into;
 use diesel::prelude::*;
 use diesel::sql_types::BigInt;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
-use rand::TryRngCore;
-use rand::rngs::OsRng;
+use rand::TryRng;
+use rand::rngs::SysRng;
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
@@ -54,7 +53,7 @@ pub async fn create_instance(
     let id = Uuid::new_v4();
 
     let mut instance_token: [u8; 64] = [0; 64];
-    OsRng.try_fill_bytes(&mut instance_token)?;
+    SysRng.try_fill_bytes(&mut instance_token)?;
 
     let addr = allocate_gameserver(
         state.clone(),
@@ -143,8 +142,8 @@ pub async fn search_instances(
 ) -> Result<Json<InstanceSearchResult>, ApiError> {
     let mut conn = state.pool.get().await?;
 
-    conn.transaction(|conn| {
-        async move {
+    conn.transaction(async |conn| {
+        {
             let mut query = instances::table
                 .left_join(users::table)
                 .group_by(instances::id)
@@ -195,7 +194,6 @@ pub async fn search_instances(
                 })
                 .map(Json)
         }
-        .scope_boxed()
     })
     .await
 }
@@ -211,7 +209,7 @@ pub async fn get_instance(
         .first::<Instance>(&mut conn)
         .await
         .map_err(ApiError::from)
-        .map(|instance| instance.into())
+        .map(Into::into)
         .map(Json)
 }
 
@@ -241,8 +239,8 @@ pub async fn join_instance(
 ) -> Result<Json<InstanceIdentifier>, ApiError> {
     let mut conn = state.pool.get().await?;
 
-    conn.transaction(|mut conn| {
-        async move {
+    conn.transaction(async |mut conn| {
+        {
             let Some(instance) = instances::table
                 .select(Instance::as_select())
                 .for_no_key_update()
@@ -257,7 +255,7 @@ pub async fn join_instance(
             // todo: check for instance privacy, blocks, etc
 
             let mut identifier = [0u8; 8];
-            OsRng.try_fill_bytes(&mut identifier)?;
+            SysRng.try_fill_bytes(&mut identifier)?;
 
             diesel::update(users::table.find(user_id))
                 .set((
@@ -269,7 +267,6 @@ pub async fn join_instance(
 
             Ok(identifier)
         }
-        .scope_boxed()
     })
     .await
     .map(InstanceIdentifier::from)

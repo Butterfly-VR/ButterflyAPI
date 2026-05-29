@@ -10,9 +10,10 @@ figured out ips use the taefik header thing
 7. per ip account creation limit (10 per year)
 8. per ip hourly login limit (~5) success or fail
 
-9. respect content privacy
-10. moderation api
+9. dedicated server asset variants
+10. respect content privacy
+11. moderation api
 
-11. timestamp db entries created / modified
+12. timestamp db entries created / modified
 
-12. friend api
+13. friend api

@@ -15,10 +15,9 @@ use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::insert_into;
 use diesel::prelude::*;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
-use rand::TryRngCore;
-use rand::rngs::OsRng;
+use rand::TryRng;
+use rand::rngs::SysRng;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -88,8 +87,7 @@ pub async fn sign_in(
     let mut conn = state.pool.get().await?;
     let state = state.clone();
 
-    conn.transaction(|mut conn| {
-        async move {
+    conn.transaction(async |mut conn| {
     // start of 'critial' section (see top of function)
     if let Ok(u) = users
         .select(User::as_select())
@@ -109,7 +107,7 @@ pub async fn sign_in(
             // if this code block isnt reached, critical section lasts until the end of the function
             let mut t = vec![0; 64];
 
-            OsRng.try_fill_bytes(&mut t)?;
+            SysRng.try_fill_bytes(&mut t)?;
 
             let token_value: Token = Token {
                 user: u.id,
@@ -145,8 +143,7 @@ pub async fn sign_in(
             error_code: ErrorCode::DosentExist,
             error_message: Some(String::from("Invalid email or password.")),
         }),
-    ))}
-    .scope_boxed()
+    ))
 })
 .await
 }
@@ -158,7 +155,7 @@ pub async fn renew(
     let mut conn = state.pool.get().await?;
 
     let mut t = vec![0; 64];
-    OsRng.try_fill_bytes(&mut t)?;
+    SysRng.try_fill_bytes(&mut t)?;
 
     let token_value: Token = Token {
         user: user_id.0,

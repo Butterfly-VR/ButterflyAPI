@@ -21,7 +21,6 @@ use diesel::insert_into;
 use diesel::prelude::*;
 use diesel_async::AsyncConnection;
 use diesel_async::RunQueryDsl;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::TryStreamExt;
 use serde::Deserialize;
 use serde::Serialize;
@@ -82,8 +81,8 @@ pub async fn create_or_update_object(
         }
     }
 
-    conn.transaction(|mut conn| {
-        async move {
+    conn.transaction(async |mut conn| {
+        {
             if let Some(object) = objects::table
                 .select(Object::as_select())
                 .filter(objects::id.eq(&object_id))
@@ -220,7 +219,6 @@ pub async fn create_or_update_object(
 
             Ok(())
         }
-        .scope_boxed()
     })
     .await
 }

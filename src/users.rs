@@ -20,10 +20,9 @@ use axum::response::IntoResponse;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::insert_into;
 use diesel::prelude::*;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, RunQueryDsl};
-use rand::TryRngCore;
-use rand::rngs::OsRng;
+use rand::TryRng;
+use rand::rngs::SysRng;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::Duration;
@@ -71,8 +70,8 @@ pub async fn sign_up(
         ));
     }
 
-    conn.transaction(|mut conn| {
-        async move {
+    conn.transaction(async |mut conn| {
+        {
             if users::table
                 .count()
                 .filter(users::username.eq(&json.username))
@@ -91,7 +90,7 @@ pub async fn sign_up(
             }
 
             let mut password_salt = [0; 64];
-            OsRng.try_fill_bytes(&mut password_salt)?;
+            SysRng.try_fill_bytes(&mut password_salt)?;
 
             if let Ok(password_hash) = hash_password(
                 state.clone(),
@@ -101,7 +100,7 @@ pub async fn sign_up(
             .await
             {
                 let mut token = [0; 64];
-                OsRng.try_fill_bytes(&mut token)?;
+                SysRng.try_fill_bytes(&mut token)?;
 
                 let id = Uuid::new_v4();
 
@@ -142,7 +141,6 @@ pub async fn sign_up(
                 Err(ApiError::WithCode(http::StatusCode::SERVICE_UNAVAILABLE))
             }
         }
-        .scope_boxed()
     })
     .await
 }
@@ -208,74 +206,71 @@ pub async fn verify_email(
 
     let mut conn = state.pool.get().await?;
 
-    conn.transaction(|mut conn| {
-        async move {
-            if let Some(user) = unverified_users::table
-                .select(UnverifiedUser::as_select())
-                .filter(unverified_users::id.eq(usr_id))
-                .first(&mut conn)
-                .await
-                .optional()?
-            {
-                if user.token == token && user.expiry > SystemTime::now() {
-                    let new_user: User = User {
-                        id: user.id,
-                        username: user.username,
-                        password: user.password,
-                        salt: user.salt,
-                        email: user.email,
-                        permisions: Vec::new(),
-                        trust: 0,
-                        homeworld: None,
-                        avatar: None,
-                        instance: None,
-                        identifier: None,
-                    };
-                    insert_into(users::table)
-                        .values(new_user)
-                        .execute(&mut conn)
-                        .await?;
-                    diesel::delete(unverified_users::table)
-                        .filter(unverified_users::id.eq(usr_id))
-                        .execute(&mut conn)
-                        .await?;
-                    Ok(())
-                } else {
-                    Err(ApiError::WithResponse(
-                        StatusCode::BAD_REQUEST,
-                        Json(ErrorInfo {
-                            error_code: ErrorCode::InvalidRequest,
-                            error_message: Some(
-                                "Token was expired or invalid. Try signing up again.".to_owned(),
-                            ),
-                        }),
-                    ))
-                }
-            } else if users::table
-                .count()
-                .filter(users::id.eq(usr_id))
-                .first::<i64>(&mut conn)
-                .await?
-                != 0
-            {
+    conn.transaction(async |mut conn| {
+        if let Some(user) = unverified_users::table
+            .select(UnverifiedUser::as_select())
+            .filter(unverified_users::id.eq(usr_id))
+            .first(&mut conn)
+            .await
+            .optional()?
+        {
+            if user.token == token && user.expiry > SystemTime::now() {
+                let new_user: User = User {
+                    id: user.id,
+                    username: user.username,
+                    password: user.password,
+                    salt: user.salt,
+                    email: user.email,
+                    permisions: Vec::new(),
+                    trust: 0,
+                    homeworld: None,
+                    avatar: None,
+                    instance: None,
+                    identifier: None,
+                };
+                insert_into(users::table)
+                    .values(new_user)
+                    .execute(&mut conn)
+                    .await?;
+                diesel::delete(unverified_users::table)
+                    .filter(unverified_users::id.eq(usr_id))
+                    .execute(&mut conn)
+                    .await?;
+                Ok(())
+            } else {
                 Err(ApiError::WithResponse(
                     StatusCode::BAD_REQUEST,
                     Json(ErrorInfo {
                         error_code: ErrorCode::InvalidRequest,
-                        error_message: Some("User is already verified".to_owned()),
-                    }),
-                ))
-            } else {
-                Err(ApiError::WithResponse(
-                    StatusCode::NOT_FOUND,
-                    Json(ErrorInfo {
-                        error_code: ErrorCode::DosentExist,
-                        error_message: None,
+                        error_message: Some(
+                            "Token was expired or invalid. Try signing up again.".to_owned(),
+                        ),
                     }),
                 ))
             }
+        } else if users::table
+            .count()
+            .filter(users::id.eq(usr_id))
+            .first::<i64>(&mut conn)
+            .await?
+            != 0
+        {
+            Err(ApiError::WithResponse(
+                StatusCode::BAD_REQUEST,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::InvalidRequest,
+                    error_message: Some("User is already verified".to_owned()),
+                }),
+            ))
+        } else {
+            Err(ApiError::WithResponse(
+                StatusCode::NOT_FOUND,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::DosentExist,
+                    error_message: None,
+                }),
+            ))
         }
-        .scope_boxed()
     })
     .await
 }
