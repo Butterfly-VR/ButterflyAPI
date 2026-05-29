@@ -214,29 +214,17 @@ pub async fn get_instance(
 }
 
 #[derive(Serialize)]
-pub struct InstanceIdentifier {
+pub struct InstanceJoinInfo {
+    pub ip: String,
+    pub port: u16,
     pub identifier: Vec<u8>,
-}
-
-impl From<Vec<u8>> for InstanceIdentifier {
-    fn from(value: Vec<u8>) -> Self {
-        Self { identifier: value }
-    }
-}
-
-impl From<[u8; 8]> for InstanceIdentifier {
-    fn from(value: [u8; 8]) -> Self {
-        Self {
-            identifier: value.to_vec(),
-        }
-    }
 }
 
 pub async fn join_instance(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Extension(user_id): Extension<Uuid>,
-) -> Result<Json<InstanceIdentifier>, ApiError> {
+) -> Result<Json<InstanceJoinInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
 
     conn.transaction(async |mut conn| {
@@ -265,11 +253,14 @@ pub async fn join_instance(
                 .execute(&mut conn)
                 .await?;
 
-            Ok(identifier)
+            Ok(InstanceJoinInfo {
+                ip: instance.ip.to_string(),
+                port: instance.port as u16,
+                identifier: identifier.to_vec(),
+            })
         }
     })
     .await
-    .map(InstanceIdentifier::from)
     .map(Json)
 }
 

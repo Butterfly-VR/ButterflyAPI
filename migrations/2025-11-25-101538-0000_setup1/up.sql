@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"homeworld" UUID,
 	"avatar" UUID,
 	"instance" UUID,
+	"identifier" BYTEA,
 	PRIMARY KEY("id")
 );
 
@@ -20,6 +21,7 @@ CREATE INDEX "users_homeworld_index" ON "users" ("homeworld");
 CREATE INDEX "users_avatar_index" ON "users" ("avatar");
 
 CREATE INDEX "users_instance_index" ON "users" ("instance");
+CREATE INDEX "users_identifier_index" ON "users" ("identifier");
 
 CREATE TABLE IF NOT EXISTS "unverified_users" (
 	"id" UUID NOT NULL UNIQUE,
@@ -95,7 +97,8 @@ CREATE TABLE IF NOT EXISTS "instances" (
 	"publicity" SMALLINT NOT NULL,
 	"anyone_can_invite" BOOLEAN NOT NULL,
 	"is_gameserver" BOOLEAN NOT NULL,
-	"client_token" BYTEA NOT NULL,
+	"ip" INET NOT NULL,
+	"port" INTEGER NOT NULL,
 	PRIMARY KEY("id")
 );
 
@@ -108,7 +111,7 @@ ON UPDATE CASCADE ON DELETE CASCADE;
 
 ALTER TABLE "users"
 ADD CONSTRAINT fk_users_instances FOREIGN KEY("instance") REFERENCES "instances"("id")
-ON UPDATE CASCADE ON DELETE CASCADE;
+ON UPDATE CASCADE ON DELETE SET NULL;
 ALTER TABLE "users"
 ADD CONSTRAINT fk_users_objects_homeworlds FOREIGN KEY("homeworld") REFERENCES "objects"("id")
 ON UPDATE CASCADE ON DELETE SET NULL;
@@ -122,10 +125,10 @@ ON UPDATE CASCADE ON DELETE CASCADE;
 
 ALTER TABLE "objects"
 ADD CONSTRAINT fk_objects_users FOREIGN KEY("creator") REFERENCES "users"("id")
-ON UPDATE CASCADE ON DELETE CASCADE;
+ON UPDATE RESTRICT ON DELETE RESTRICT;
 ALTER TABLE "objects"
 ADD CONSTRAINT fk_objects_licenses FOREIGN KEY("license") REFERENCES "licenses"("license")
-ON UPDATE CASCADE ON DELETE NO ACTION;
+ON UPDATE RESTRICT ON DELETE RESTRICT;
 
 ALTER TABLE "tags"
 ADD CONSTRAINT fk_tags_objects FOREIGN KEY("object") REFERENCES "objects"("id")
