@@ -6,9 +6,9 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"salt" BYTEA NOT NULL,
 	"permisions" BOOLEAN[] NOT NULL,
 	"trust" INTEGER NOT NULL,
-	"homeworld" UUID NULL,
-	"avatar" UUID NULL,
-	"instance" UUID NULL,
+	"homeworld" UUID,
+	"avatar" UUID,
+	"instance" UUID,
 	PRIMARY KEY("id")
 );
 

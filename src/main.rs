@@ -11,6 +11,7 @@ use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use dotenvy::dotenv;
 use serde::Serialize;
 use std::error::Error;
+use std::hint::black_box;
 use std::{env, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
@@ -115,9 +116,37 @@ async fn main() {
         }),
     });
 
+    let health_check_state = app_state.clone();
+
     let app = Router::new()
-        .route(ROUTE_ORIGIN, get(|| async { http::StatusCode::OK }))
-        .route(COFFEE_ORIGIN, get(|| async { http::StatusCode::IM_A_TEAPOT }))
+        .route(
+            ROUTE_ORIGIN,
+            get(async move || {
+                // this route is used as a health check
+                // so we should check the database connection and clients
+                let _ = black_box(health_check_state.pool.get().await.unwrap());
+                let _ = black_box(
+                    health_check_state
+                        .s3_client
+                        .list_buckets()
+                        .send()
+                        .await
+                        .unwrap(),
+                );
+                let _ = black_box(
+                    health_check_state
+                        .kube_client
+                        .list_api_groups()
+                        .await
+                        .unwrap(),
+                );
+                http::StatusCode::OK
+            }),
+        )
+        .route(
+            COFFEE_ORIGIN,
+            get(|| async { http::StatusCode::IM_A_TEAPOT }),
+        )
         .nest(ROUTE_ORIGIN, users::users_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, tokens::tokens_router(app_state.clone()))
         .nest(ROUTE_ORIGIN, objects::objects_router(app_state.clone()))
