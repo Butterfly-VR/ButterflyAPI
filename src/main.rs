@@ -12,8 +12,8 @@ use dotenvy::dotenv;
 use serde::Serialize;
 use std::error::Error;
 use std::hint::black_box;
+use std::sync::Mutex;
 use std::{env, sync::Arc};
-use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 mod auth;
 mod email;
@@ -37,10 +37,9 @@ const COFFEE_ORIGIN: &str = "/api/v0/coffee";
 // since allocating at runtime is slow and could cause ooms
 // we allocate several 'blocks' upfront guarded by mutexs
 // and lock one to use whenever we need to hash
-// this doubles as a limit on the number of parallel login requests
-// there isnt much point in having this more than the number of
-// hardware threads, since it wastes memory and can cause timing issues
-const HASHER_MEMORY_BLOCKS: usize = 1;
+// this shouldnt be more than the number of available threads,
+// since it wastes memory with no benefit
+const HASHER_MEMORY_BLOCKS: usize = 2;
 
 #[derive(Serialize)]
 enum ErrorCode {

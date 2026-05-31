@@ -1,3 +1,5 @@
+0. new schema + tgram indexes
+
 1. working instance api
 
 2. user content size limits (100mb, more for supporter accounts)
@@ -14,6 +16,4 @@ figured out ips use the taefik header thing
 10. respect content privacy
 11. moderation api
 
-12. timestamp db entries created / modified
-
-13. friend api
+12. friend api
