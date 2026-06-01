@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
@@ -19,13 +21,8 @@ CREATE TABLE IF NOT EXISTS "users" (
 	PRIMARY KEY("id")
 );
 
-CREATE INDEX "users_email_index_hash"
-ON "users" USING HASH("email");
-
-CREATE INDEX "users_trust_index" ON "users" ("trust");
-CREATE INDEX "users_homeworld_index" ON "users" ("homeworld");
-CREATE INDEX "users_avatar_index" ON "users" ("avatar");
-
+CREATE INDEX "users_username_trgm_index" ON "users" USING GIN ("username" gin_trgm_ops);
+CREATE INDEX "users_email_hash_index" ON "users" USING HASH("email");
 CREATE INDEX "users_instance_index" ON "users" ("instance");
 CREATE INDEX "users_identifier_index" ON "users" ("identifier");
 
@@ -40,6 +37,10 @@ CREATE TABLE IF NOT EXISTS "moderations" (
 	PRIMARY KEY("id")
 );
 
+CREATE INDEX "moderations_target_index" ON "moderations" ("target");
+CREATE INDEX "moderations_moderator_index" ON "moderations" ("moderator");
+CREATE INDEX "moderations_expires_index" ON "moderations" ("expires");
+
 CREATE TABLE IF NOT EXISTS "notifications" (
 	"id" UUID NOT NULL UNIQUE,
 	"target" UUID,
@@ -47,11 +48,12 @@ CREATE TABLE IF NOT EXISTS "notifications" (
 	"header" VARCHAR(128),
 	"body" TEXT,
 	"additional_data" JSONB,
-	"read" BOOLEAN NOT NULL DEFAULT false,
+	"dismissed" BOOLEAN NOT NULL DEFAULT false,
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
 	PRIMARY KEY("id")
 );
 
+CREATE INDEX "notifications_target_index" ON "notifications" ("target");
 
 CREATE TABLE IF NOT EXISTS "ip_addresses" (
 	"user" UUID NOT NULL,
@@ -59,6 +61,9 @@ CREATE TABLE IF NOT EXISTS "ip_addresses" (
 	"first_seen" TIMESTAMP NOT NULL DEFAULT now(),
 	PRIMARY KEY("user", "ip")
 );
+
+CREATE INDEX "ip_addresses_user_index" ON "ip_addresses" ("user");
+CREATE INDEX "ip_addresses_ip_index" ON "ip_addresses" ("ip");
 
 CREATE TABLE IF NOT EXISTS "user_reports" (
 	"id" UUID NOT NULL UNIQUE,
@@ -71,6 +76,9 @@ CREATE TABLE IF NOT EXISTS "user_reports" (
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
 	PRIMARY KEY("id")
 );
+
+CREATE INDEX "user_reports_reporter_index" ON "user_reports" ("reporter");
+CREATE INDEX "user_reports_target_index" ON "user_reports" ("target");
 
 CREATE TABLE IF NOT EXISTS "unverified_users" (
 	"id" UUID NOT NULL UNIQUE,
@@ -93,6 +101,9 @@ CREATE TABLE IF NOT EXISTS "tokens" (
 	PRIMARY KEY("token")
 );
 
+CREATE INDEX "tokens_user_index" ON "tokens" ("user");
+CREATE INDEX "tokens_expiry_index" ON "tokens" ("expiry");
+
 CREATE TABLE IF NOT EXISTS "user_chat_sessions" (
 	"id" UUID NOT NULL UNIQUE,
 	"name" VARCHAR(64) NOT NULL,
@@ -101,6 +112,9 @@ CREATE TABLE IF NOT EXISTS "user_chat_sessions" (
 	PRIMARY KEY("id")
 );
 
+CREATE INDEX "user_chat_sessions_name_trgm_index" ON "user_chat_sessions" USING GIN ("name" gin_trgm_ops);
+CREATE INDEX "user_chat_sessions_owner_index" ON "user_chat_sessions" ("owner");
+
 CREATE TABLE IF NOT EXISTS "chat_session_members" (
 	"session" UUID NOT NULL,
 	"user" UUID NOT NULL,
@@ -108,6 +122,9 @@ CREATE TABLE IF NOT EXISTS "chat_session_members" (
 	"joined_at" TIMESTAMP NOT NULL DEFAULT now(),
 	PRIMARY KEY("session", "user")
 );
+
+CREATE INDEX "chat_session_members_session_index" ON "chat_session_members" ("session");
+CREATE INDEX "chat_session_members_user_index" ON "chat_session_members" ("user");
 
 CREATE TABLE IF NOT EXISTS "chat_session_messages" (
 	"id" UUID NOT NULL UNIQUE,
@@ -119,8 +136,8 @@ CREATE TABLE IF NOT EXISTS "chat_session_messages" (
 	PRIMARY KEY("id")
 );
 
-
-CREATE INDEX "tokens_user_index" ON "tokens" ("user");
+CREATE INDEX "chat_session_messages_session_index" ON "chat_session_messages" ("session");
+CREATE INDEX "chat_session_messages_user_index" ON "chat_session_messages" ("user");
 
 CREATE TABLE IF NOT EXISTS "objects" (
 	"id" UUID NOT NULL UNIQUE,
@@ -135,28 +152,27 @@ CREATE TABLE IF NOT EXISTS "objects" (
 	"creator" UUID NOT NULL,
 	"object_type" SMALLINT NOT NULL,
 	"publicity" SMALLINT NOT NULL,
-	"license" INTEGER NOT NULL,
+	"license" UUID NOT NULL,
 	"encryption_key" BYTEA NOT NULL,
 	"encryption_iv" BYTEA NOT NULL,
 	"deleted_at" TIMESTAMP,
 	PRIMARY KEY("id")
 );
 
+CREATE INDEX "objects_name_trgm_index" ON "objects" USING GIN ("name" gin_trgm_ops);
 CREATE INDEX "objects_updated_at_index" ON "objects" ("updated_at");
 CREATE INDEX "objects_created_at_index" ON "objects" ("created_at");
 CREATE INDEX "objects_object_size_index" ON "objects" ("object_size");
 CREATE INDEX "objects_creator_index" ON "objects" ("creator");
-CREATE INDEX "objects_object_type_index" ON "objects" ("object_type");
-CREATE INDEX "objects_publicity_index" ON "objects" ("publicity");
+CREATE INDEX "objects_license_index" ON "objects" ("license");
 
 CREATE TABLE IF NOT EXISTS "licenses" (
-	"license" SERIAL NOT NULL UNIQUE,
-	"text" VARCHAR(100000) NOT NULL UNIQUE,
-	PRIMARY KEY("license")
+	"id" UUID NOT NULL UNIQUE,
+	"text" TEXT NOT NULL UNIQUE,
+	PRIMARY KEY("id")
 );
 
-CREATE INDEX "licenses_text_index_hash"
-ON "licenses" USING HASH ("text");
+CREATE INDEX "licenses_text_hash_index" ON "licenses" USING HASH ("text");
 
 CREATE TABLE IF NOT EXISTS "tags" (
 	"tag" VARCHAR(32) NOT NULL,
@@ -182,8 +198,9 @@ CREATE TABLE IF NOT EXISTS "instances" (
 	PRIMARY KEY("id")
 );
 
+CREATE INDEX "instances_name_trgm_index" ON "instances" USING GIN ("name" gin_trgm_ops);
+CREATE INDEX "instances_server_token_index" ON "instances" ("server_token");
 CREATE INDEX "instances_world_index" ON "instances" ("world");
-CREATE INDEX "instances_name_index" ON "instances" ("name");
 
 ALTER TABLE "instances"
 ADD CONSTRAINT fk_instances_objects FOREIGN KEY("world") REFERENCES "objects"("id");

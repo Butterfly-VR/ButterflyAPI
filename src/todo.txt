@@ -1,4 +1,5 @@
-0. fkeys, indexes, trigrams
+0. fkeys
+0.5. update code + db jobs
 
 1. working instance api
 1.5. better logging
