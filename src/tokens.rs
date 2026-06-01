@@ -67,13 +67,16 @@ pub async fn sign_in(
     State(state): State<Arc<AppState>>,
     Json(json): Json<SignInRequest>,
 ) -> Result<Json<SignInResponse>, ApiError> {
-    // since we reject incorrect emails before hashing the password an attacker could use the difference in response time to find valid emails.
-    // to avoid this we wait a specified time that should be longer than the time spent hashing to hide the difference
+    // since we reject incorrect emails before hashing the password an attacker
+    // could use the difference in response time to find valid emails.
+    // to avoid this we wait a specified time that should be longer
+    // than the time spent hashing to hide the difference
     // starting from where the email is checked and ending once the password is confirmed to be correct
-    // there should be no early returns, to avoid any risk of exposing timing information. this means no '?' or .unwrap()
-    const TIMING_ATTACK_PROTECTION: Duration = Duration::from_secs(2);
+    // there should be no early returns, to avoid any risk of exposing timing information.
+    // this means no '?' or .unwrap()
+    const TIMING_ATTACK_PROTECTION: Duration = Duration::from_millis(500);
 
-    if !check_email(&json.email) || json.email.len() > 128 {
+    if json.email.len() > 128 || !check_email(&json.email) {
         return Err(ApiError::WithResponse(
             StatusCode::BAD_REQUEST,
             Json(ErrorInfo {

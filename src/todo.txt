@@ -1,12 +1,15 @@
-0. new schema + tgram indexes
+0. fkeys, indexes, trigrams
 
 1. working instance api
+1.5. better logging
 
 2. user content size limits (100mb, more for supporter accounts)
+2.5. also limit size for licenses
 3. upload / download(?) limits per user (~50GB up 150GB down per month)
 4. overall rate limit per user (~5000 per hour)
 5. cache control headers on everything
 6. cache user uploads
+6.5. cck licenses
 
 figured out ips use the taefik header thing
 7. per ip account creation limit (10 per year)
@@ -14,6 +17,7 @@ figured out ips use the taefik header thing
 
 9. dedicated server asset variants
 10. respect content privacy
-11. moderation api
+11. password recovery
+12. moderation api
 
-12. friend api
+13. friend api

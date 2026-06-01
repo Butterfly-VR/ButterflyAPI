@@ -4,12 +4,18 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"email" VARCHAR(128) NOT NULL UNIQUE,
 	"password" BYTEA NOT NULL,
 	"salt" BYTEA NOT NULL,
-	"permisions" BOOLEAN[] NOT NULL,
+	"permissions_level" SMALLINT NOT NULL,
 	"trust" INTEGER NOT NULL,
 	"homeworld" UUID,
 	"avatar" UUID,
 	"instance" UUID,
 	"identifier" BYTEA,
+	"created_at" TIMESTAMP NOT NULL,
+	"deleted_at" TIMESTAMP,
+	"can_login" BOOLEAN NOT NULL DEFAULT true,
+	"is_deactivated" BOOLEAN NOT NULL DEFAULT false,
+	"upload_quota_used" BIGINT NOT NULL,
+	"download_quota_used" BIGINT NOT NULL,
 	PRIMARY KEY("id")
 );
 
@@ -23,6 +29,49 @@ CREATE INDEX "users_avatar_index" ON "users" ("avatar");
 CREATE INDEX "users_instance_index" ON "users" ("instance");
 CREATE INDEX "users_identifier_index" ON "users" ("identifier");
 
+CREATE TABLE IF NOT EXISTS "moderations" (
+	"id" UUID NOT NULL UNIQUE,
+	"target" UUID NOT NULL,
+	"moderator" UUID NOT NULL,
+	"type" SMALLINT NOT NULL,
+	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
+	"expires" TIMESTAMP,
+	"details" TEXT,
+	PRIMARY KEY("id")
+);
+
+CREATE TABLE IF NOT EXISTS "notifications" (
+	"id" UUID NOT NULL UNIQUE,
+	"target" UUID,
+	"type" SMALLINT NOT NULL,
+	"header" VARCHAR(128),
+	"body" TEXT,
+	"additional_data" JSONB,
+	"read" BOOLEAN NOT NULL DEFAULT false,
+	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
+	PRIMARY KEY("id")
+);
+
+
+CREATE TABLE IF NOT EXISTS "ip_addresses" (
+	"user" UUID NOT NULL,
+	"ip" INET NOT NULL,
+	"first_seen" TIMESTAMP NOT NULL DEFAULT now(),
+	PRIMARY KEY("user", "ip")
+);
+
+CREATE TABLE IF NOT EXISTS "user_reports" (
+	"id" UUID NOT NULL UNIQUE,
+	"reporter" UUID NOT NULL,
+	"target" UUID NOT NULL,
+	"target_type" SMALLINT NOT NULL,
+	"report_type" SMALLINT NOT NULL,
+	"details" VARCHAR(4096) NOT NULL,
+	"additional_data" JSONB,
+	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
+	PRIMARY KEY("id")
+);
+
 CREATE TABLE IF NOT EXISTS "unverified_users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
@@ -31,6 +80,7 @@ CREATE TABLE IF NOT EXISTS "unverified_users" (
 	"salt" BYTEA NOT NULL,
 	"token" BYTEA NOT NULL,
 	"expiry" TIMESTAMP NOT NULL,
+	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
 	PRIMARY KEY("id")
 );
 
@@ -39,8 +89,36 @@ CREATE TABLE IF NOT EXISTS "tokens" (
 	"user" UUID NOT NULL,
 	"renewable" BOOLEAN NOT NULL,
 	"expiry" TIMESTAMP NOT NULL DEFAULT now(),
+	"last_used" TIMESTAMP NOT NULL DEFAULT now(),
 	PRIMARY KEY("token")
 );
+
+CREATE TABLE IF NOT EXISTS "user_chat_sessions" (
+	"id" UUID NOT NULL UNIQUE,
+	"name" VARCHAR(64) NOT NULL,
+	"owner" UUID NOT NULL,
+	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
+	PRIMARY KEY("id")
+);
+
+CREATE TABLE IF NOT EXISTS "chat_session_members" (
+	"session" UUID NOT NULL,
+	"user" UUID NOT NULL,
+	"last_seen_message" UUID,
+	"joined_at" TIMESTAMP NOT NULL DEFAULT now(),
+	PRIMARY KEY("session", "user")
+);
+
+CREATE TABLE IF NOT EXISTS "chat_session_messages" (
+	"id" UUID NOT NULL UNIQUE,
+	"session" UUID NOT NULL,
+	"user" UUID NOT NULL,
+	"content" VARCHAR(4096) NOT NULL,
+	"sent_at" TIMESTAMP NOT NULL DEFAULT now(),
+	"modified_at" TIMESTAMP,
+	PRIMARY KEY("id")
+);
+
 
 CREATE INDEX "tokens_user_index" ON "tokens" ("user");
 
@@ -60,6 +138,7 @@ CREATE TABLE IF NOT EXISTS "objects" (
 	"license" INTEGER NOT NULL,
 	"encryption_key" BYTEA NOT NULL,
 	"encryption_iv" BYTEA NOT NULL,
+	"deleted_at" TIMESTAMP,
 	PRIMARY KEY("id")
 );
 
@@ -99,6 +178,7 @@ CREATE TABLE IF NOT EXISTS "instances" (
 	"is_gameserver" BOOLEAN NOT NULL,
 	"ip" INET NOT NULL,
 	"port" INTEGER NOT NULL,
+	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
 	PRIMARY KEY("id")
 );
 
@@ -106,8 +186,7 @@ CREATE INDEX "instances_world_index" ON "instances" ("world");
 CREATE INDEX "instances_name_index" ON "instances" ("name");
 
 ALTER TABLE "instances"
-ADD CONSTRAINT fk_instances_objects FOREIGN KEY("world") REFERENCES "objects"("id")
-ON UPDATE CASCADE ON DELETE CASCADE;
+ADD CONSTRAINT fk_instances_objects FOREIGN KEY("world") REFERENCES "objects"("id");
 
 ALTER TABLE "users"
 ADD CONSTRAINT fk_users_instances FOREIGN KEY("instance") REFERENCES "instances"("id")
