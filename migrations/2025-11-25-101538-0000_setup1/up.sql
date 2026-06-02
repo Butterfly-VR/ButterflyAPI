@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"created_at" TIMESTAMP NOT NULL,
 	"deleted_at" TIMESTAMP,
 	"can_login" BOOLEAN NOT NULL DEFAULT true,
-	"is_deactivated" BOOLEAN NOT NULL DEFAULT false,
 	"upload_quota_used" BIGINT NOT NULL,
 	"download_quota_used" BIGINT NOT NULL,
 	PRIMARY KEY("id")
@@ -235,15 +234,20 @@ ADD CONSTRAINT fk_chat_session_members_users_users FOREIGN KEY("user") REFERENCE
 ON DELETE CASCADE;
 
 ALTER TABLE "chat_session_messages"
+ADD CONSTRAINT fk_chat_session_messages_users_users
+FOREIGN KEY("user") REFERENCES "users"("id")
+ON DELETE SET NULL;
+
+
+ALTER TABLE "chat_session_messages"
 ADD CONSTRAINT fk_chat_session_messages_chat_session_members_sessions_and_users
-FOREIGN KEY("session", "user") REFERENCES "chat_session_members"("session", "user")
-ON DELETE SET NULL (user);
+FOREIGN KEY("session", "user") REFERENCES "chat_session_members"("session", "user");
 
 ALTER TABLE "objects"
 ADD CONSTRAINT fk_objects_users_creators FOREIGN KEY("creator") REFERENCES "users"("id")
 ON DELETE RESTRICT;
 ALTER TABLE "objects"
-ADD CONSTRAINT fk_objects_licenses_licenses FOREIGN KEY("license") REFERENCES "licenses"("license")
+ADD CONSTRAINT fk_objects_licenses_licenses FOREIGN KEY("license") REFERENCES "licenses"("id")
 ON DELETE RESTRICT;
 
 ALTER TABLE "tags"
