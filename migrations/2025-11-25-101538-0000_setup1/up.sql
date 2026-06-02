@@ -29,7 +29,7 @@ CREATE INDEX "users_identifier_index" ON "users" ("identifier");
 CREATE TABLE IF NOT EXISTS "moderations" (
 	"id" UUID NOT NULL UNIQUE,
 	"target" UUID NOT NULL,
-	"moderator" UUID NOT NULL,
+	"moderator" UUID,
 	"type" SMALLINT NOT NULL,
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
 	"expires" TIMESTAMP,
@@ -50,10 +50,12 @@ CREATE TABLE IF NOT EXISTS "notifications" (
 	"additional_data" JSONB,
 	"dismissed" BOOLEAN NOT NULL DEFAULT false,
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
+	"expires" TIMESTAMP,
 	PRIMARY KEY("id")
 );
 
 CREATE INDEX "notifications_target_index" ON "notifications" ("target");
+CREATE INDEX "notifications_expires_index" ON "notifications" ("expires");
 
 CREATE TABLE IF NOT EXISTS "ip_addresses" (
 	"user" UUID NOT NULL,
@@ -104,17 +106,6 @@ CREATE TABLE IF NOT EXISTS "tokens" (
 CREATE INDEX "tokens_user_index" ON "tokens" ("user");
 CREATE INDEX "tokens_expiry_index" ON "tokens" ("expiry");
 
-CREATE TABLE IF NOT EXISTS "user_chat_sessions" (
-	"id" UUID NOT NULL UNIQUE,
-	"name" VARCHAR(64) NOT NULL,
-	"owner" UUID NOT NULL,
-	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
-	PRIMARY KEY("id")
-);
-
-CREATE INDEX "user_chat_sessions_name_trgm_index" ON "user_chat_sessions" USING GIN ("name" gin_trgm_ops);
-CREATE INDEX "user_chat_sessions_owner_index" ON "user_chat_sessions" ("owner");
-
 CREATE TABLE IF NOT EXISTS "chat_session_members" (
 	"session" UUID NOT NULL,
 	"user" UUID NOT NULL,
@@ -129,7 +120,7 @@ CREATE INDEX "chat_session_members_user_index" ON "chat_session_members" ("user"
 CREATE TABLE IF NOT EXISTS "chat_session_messages" (
 	"id" UUID NOT NULL UNIQUE,
 	"session" UUID NOT NULL,
-	"user" UUID NOT NULL,
+	"user" UUID,
 	"content" VARCHAR(4096) NOT NULL,
 	"sent_at" TIMESTAMP NOT NULL DEFAULT now(),
 	"modified_at" TIMESTAMP,
@@ -151,6 +142,8 @@ CREATE TABLE IF NOT EXISTS "objects" (
 	"image_size" BIGINT NOT NULL,
 	"creator" UUID NOT NULL,
 	"object_type" SMALLINT NOT NULL,
+	"likes" INTEGER NOT NULL,
+	"dislikes" INTEGER NOT NULL,
 	"publicity" SMALLINT NOT NULL,
 	"license" UUID NOT NULL,
 	"encryption_key" BYTEA NOT NULL,
@@ -164,6 +157,8 @@ CREATE INDEX "objects_updated_at_index" ON "objects" ("updated_at");
 CREATE INDEX "objects_created_at_index" ON "objects" ("created_at");
 CREATE INDEX "objects_object_size_index" ON "objects" ("object_size");
 CREATE INDEX "objects_creator_index" ON "objects" ("creator");
+CREATE INDEX "objects_likes_index" ON "objects" ("likes");
+CREATE INDEX "objects_dislikes_index" ON "objects" ("dislikes");
 CREATE INDEX "objects_license_index" ON "objects" ("license");
 
 CREATE TABLE IF NOT EXISTS "licenses" (
@@ -202,30 +197,59 @@ CREATE INDEX "instances_name_trgm_index" ON "instances" USING GIN ("name" gin_tr
 CREATE INDEX "instances_server_token_index" ON "instances" ("server_token");
 CREATE INDEX "instances_world_index" ON "instances" ("world");
 
-ALTER TABLE "instances"
-ADD CONSTRAINT fk_instances_objects FOREIGN KEY("world") REFERENCES "objects"("id");
-
-ALTER TABLE "users"
-ADD CONSTRAINT fk_users_instances FOREIGN KEY("instance") REFERENCES "instances"("id")
-ON UPDATE CASCADE ON DELETE SET NULL;
 ALTER TABLE "users"
 ADD CONSTRAINT fk_users_objects_homeworlds FOREIGN KEY("homeworld") REFERENCES "objects"("id")
-ON UPDATE CASCADE ON DELETE SET NULL;
+ON DELETE SET NULL;
 ALTER TABLE "users"
 ADD CONSTRAINT fk_users_objects_avatars FOREIGN KEY("avatar") REFERENCES "objects"("id")
-ON UPDATE CASCADE ON DELETE SET NULL;
+ON DELETE SET NULL;
+ALTER TABLE "users"
+ADD CONSTRAINT fk_users_instances_instances FOREIGN KEY("instance") REFERENCES "instances"("id")
+ON DELETE SET NULL;
+
+ALTER TABLE "moderations"
+ADD CONSTRAINT fk_moderations_users_targets FOREIGN KEY("target") REFERENCES "users"("id")
+ON DELETE RESTRICT;
+ALTER TABLE "moderations"
+ADD CONSTRAINT fk_moderations_users_moderators FOREIGN KEY("moderator") REFERENCES "users"("id")
+ON DELETE SET NULL;
+
+ALTER TABLE "notifications"
+ADD CONSTRAINT fk_notifications_users_targets FOREIGN KEY("target") REFERENCES "users"("id")
+ON DELETE CASCADE;
+
+ALTER TABLE "ip_addresses"
+ADD CONSTRAINT fk_ip_addresses_users_users FOREIGN KEY("user") REFERENCES "users"("id")
+ON DELETE CASCADE;
+
+ALTER TABLE "user_reports"
+ADD CONSTRAINT fk_user_reports_users_reporters FOREIGN KEY("reporter") REFERENCES "users"("id")
+ON DELETE CASCADE;
 
 ALTER TABLE "tokens"
-ADD CONSTRAINT fk_tokens_users FOREIGN KEY("user") REFERENCES "users"("id")
-ON UPDATE CASCADE ON DELETE CASCADE;
+ADD CONSTRAINT fk_tokens_users_users FOREIGN KEY("user") REFERENCES "users"("id")
+ON DELETE CASCADE;
+
+ALTER TABLE "chat_session_members"
+ADD CONSTRAINT fk_chat_session_members_users_users FOREIGN KEY("user") REFERENCES "users"("id")
+ON DELETE CASCADE;
+
+ALTER TABLE "chat_session_messages"
+ADD CONSTRAINT fk_chat_session_messages_chat_session_members_sessions_and_users
+FOREIGN KEY("session", "user") REFERENCES "chat_session_members"("session", "user")
+ON DELETE SET NULL (user);
 
 ALTER TABLE "objects"
-ADD CONSTRAINT fk_objects_users FOREIGN KEY("creator") REFERENCES "users"("id")
-ON UPDATE RESTRICT ON DELETE RESTRICT;
+ADD CONSTRAINT fk_objects_users_creators FOREIGN KEY("creator") REFERENCES "users"("id")
+ON DELETE RESTRICT;
 ALTER TABLE "objects"
-ADD CONSTRAINT fk_objects_licenses FOREIGN KEY("license") REFERENCES "licenses"("license")
-ON UPDATE RESTRICT ON DELETE RESTRICT;
+ADD CONSTRAINT fk_objects_licenses_licenses FOREIGN KEY("license") REFERENCES "licenses"("license")
+ON DELETE RESTRICT;
 
 ALTER TABLE "tags"
-ADD CONSTRAINT fk_tags_objects FOREIGN KEY("object") REFERENCES "objects"("id")
-ON UPDATE CASCADE ON DELETE CASCADE;
+ADD CONSTRAINT fk_tags_objects_objects FOREIGN KEY("object") REFERENCES "objects"("id")
+ON DELETE CASCADE;
+
+ALTER TABLE "instances"
+ADD CONSTRAINT fk_instances_objects_worlds FOREIGN KEY("world") REFERENCES "objects"("id")
+ON DELETE CASCADE;
