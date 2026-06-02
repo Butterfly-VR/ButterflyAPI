@@ -116,9 +116,9 @@ pub async fn create_or_update_object(
                 new_object.updated_at = SystemTime::now();
 
                 if let Some(license_number) = licenses::table
-                    .select(licenses::license)
+                    .select(licenses::id)
                     .filter(licenses::text.eq(&json.license))
-                    .first::<i32>(&mut conn)
+                    .first::<Uuid>(&mut conn)
                     .await
                     .optional()?
                 {
@@ -126,7 +126,7 @@ pub async fn create_or_update_object(
                 } else {
                     new_object.license = insert_into(licenses::table)
                         .values(licenses::text.eq(&json.license))
-                        .returning(licenses::license)
+                        .returning(licenses::id)
                         .get_result(&mut conn)
                         .await?;
                 }
@@ -171,9 +171,9 @@ pub async fn create_or_update_object(
                 }
 
                 let license = if let Some(license_number) = licenses::table
-                    .select(licenses::license)
+                    .select(licenses::id)
                     .filter(licenses::text.eq(&json.license))
-                    .first::<i32>(&mut conn)
+                    .first::<Uuid>(&mut conn)
                     .await
                     .optional()?
                 {
@@ -181,7 +181,7 @@ pub async fn create_or_update_object(
                 } else {
                     insert_into(licenses::table)
                         .values(licenses::text.eq(&json.license))
-                        .returning(licenses::license)
+                        .returning(licenses::id)
                         .get_result(&mut conn)
                         .await?
                 };
@@ -236,7 +236,7 @@ pub struct ObjectInfo {
     pub creator: Uuid,
     pub object_type: i16,
     pub publicity: i16,
-    pub license: i32,
+    pub license: Uuid,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
     pub tags: Vec<String>,

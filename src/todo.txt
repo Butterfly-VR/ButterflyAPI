@@ -1,4 +1,4 @@
-0.5. update code + db jobs
+0.5. db jobs
 
 1. working instance api
 1.5. better logging

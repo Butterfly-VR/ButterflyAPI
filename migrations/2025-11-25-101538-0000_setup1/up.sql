@@ -1,6 +1,6 @@
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION "pg_trgm";
 
-CREATE TABLE IF NOT EXISTS "users" (
+CREATE TABLE "users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
 	"email" VARCHAR(128) NOT NULL UNIQUE,
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"avatar" UUID,
 	"instance" UUID,
 	"identifier" BYTEA,
-	"created_at" TIMESTAMP NOT NULL,
+	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
 	"deleted_at" TIMESTAMP,
 	"can_login" BOOLEAN NOT NULL DEFAULT true,
 	"upload_quota_used" BIGINT NOT NULL,
@@ -25,7 +25,7 @@ CREATE INDEX "users_email_hash_index" ON "users" USING HASH("email");
 CREATE INDEX "users_instance_index" ON "users" ("instance");
 CREATE INDEX "users_identifier_index" ON "users" ("identifier");
 
-CREATE TABLE IF NOT EXISTS "moderations" (
+CREATE TABLE "moderations" (
 	"id" UUID NOT NULL UNIQUE,
 	"target" UUID NOT NULL,
 	"moderator" UUID,
@@ -40,7 +40,7 @@ CREATE INDEX "moderations_target_index" ON "moderations" ("target");
 CREATE INDEX "moderations_moderator_index" ON "moderations" ("moderator");
 CREATE INDEX "moderations_expires_index" ON "moderations" ("expires");
 
-CREATE TABLE IF NOT EXISTS "notifications" (
+CREATE TABLE "notifications" (
 	"id" UUID NOT NULL UNIQUE,
 	"target" UUID,
 	"type" SMALLINT NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS "notifications" (
 CREATE INDEX "notifications_target_index" ON "notifications" ("target");
 CREATE INDEX "notifications_expires_index" ON "notifications" ("expires");
 
-CREATE TABLE IF NOT EXISTS "ip_addresses" (
+CREATE TABLE "ip_addresses" (
 	"user" UUID NOT NULL,
 	"ip" INET NOT NULL,
 	"first_seen" TIMESTAMP NOT NULL DEFAULT now(),
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS "ip_addresses" (
 CREATE INDEX "ip_addresses_user_index" ON "ip_addresses" ("user");
 CREATE INDEX "ip_addresses_ip_index" ON "ip_addresses" ("ip");
 
-CREATE TABLE IF NOT EXISTS "user_reports" (
+CREATE TABLE "user_reports" (
 	"id" UUID NOT NULL UNIQUE,
 	"reporter" UUID NOT NULL,
 	"target" UUID NOT NULL,
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS "user_reports" (
 CREATE INDEX "user_reports_reporter_index" ON "user_reports" ("reporter");
 CREATE INDEX "user_reports_target_index" ON "user_reports" ("target");
 
-CREATE TABLE IF NOT EXISTS "unverified_users" (
+CREATE TABLE "unverified_users" (
 	"id" UUID NOT NULL UNIQUE,
 	"username" VARCHAR(32) NOT NULL UNIQUE,
 	"email" VARCHAR(128) NOT NULL UNIQUE,
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS "unverified_users" (
 	PRIMARY KEY("id")
 );
 
-CREATE TABLE IF NOT EXISTS "tokens" (
+CREATE TABLE "tokens" (
 	"token" BYTEA NOT NULL UNIQUE,
 	"user" UUID NOT NULL,
 	"renewable" BOOLEAN NOT NULL,
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS "tokens" (
 CREATE INDEX "tokens_user_index" ON "tokens" ("user");
 CREATE INDEX "tokens_expiry_index" ON "tokens" ("expiry");
 
-CREATE TABLE IF NOT EXISTS "chat_session_members" (
+CREATE TABLE "chat_session_members" (
 	"session" UUID NOT NULL,
 	"user" UUID NOT NULL,
 	"last_seen_message" UUID,
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS "chat_session_members" (
 CREATE INDEX "chat_session_members_session_index" ON "chat_session_members" ("session");
 CREATE INDEX "chat_session_members_user_index" ON "chat_session_members" ("user");
 
-CREATE TABLE IF NOT EXISTS "chat_session_messages" (
+CREATE TABLE "chat_session_messages" (
 	"id" UUID NOT NULL UNIQUE,
 	"session" UUID NOT NULL,
 	"user" UUID,
@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS "chat_session_messages" (
 CREATE INDEX "chat_session_messages_session_index" ON "chat_session_messages" ("session");
 CREATE INDEX "chat_session_messages_user_index" ON "chat_session_messages" ("user");
 
-CREATE TABLE IF NOT EXISTS "objects" (
+CREATE TABLE "objects" (
 	"id" UUID NOT NULL UNIQUE,
 	"name" VARCHAR(32) NOT NULL UNIQUE,
 	"description" VARCHAR(4096) NOT NULL,
@@ -160,7 +160,7 @@ CREATE INDEX "objects_likes_index" ON "objects" ("likes");
 CREATE INDEX "objects_dislikes_index" ON "objects" ("dislikes");
 CREATE INDEX "objects_license_index" ON "objects" ("license");
 
-CREATE TABLE IF NOT EXISTS "licenses" (
+CREATE TABLE "licenses" (
 	"id" UUID NOT NULL UNIQUE,
 	"text" TEXT NOT NULL UNIQUE,
 	PRIMARY KEY("id")
@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS "licenses" (
 
 CREATE INDEX "licenses_text_hash_index" ON "licenses" USING HASH ("text");
 
-CREATE TABLE IF NOT EXISTS "tags" (
+CREATE TABLE "tags" (
 	"tag" VARCHAR(32) NOT NULL,
 	"object" UUID NOT NULL,
 	PRIMARY KEY("tag", "object")
@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS "tags" (
 CREATE INDEX "tags_tag_index" ON "tags" ("tag");
 CREATE INDEX "tags_object_index" ON "tags" ("object");
 
-CREATE TABLE IF NOT EXISTS "instances" (
+CREATE TABLE "instances" (
     "id" UUID NOT NULL UNIQUE,
 	"server_token" BYTEA NOT NULL UNIQUE,
 	"world" UUID NOT NULL,

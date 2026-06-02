@@ -221,7 +221,7 @@ pub async fn verify_email(
                     password: user.password,
                     salt: user.salt,
                     email: user.email,
-                    permisions: Vec::new(),
+                    permissions_level: 0,
                     trust: 0,
                     homeworld: None,
                     avatar: None,

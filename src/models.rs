@@ -39,7 +39,7 @@ pub struct Object {
     pub creator: Uuid,
     pub object_type: i16,
     pub publicity: i16,
-    pub license: i32,
+    pub license: Uuid,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
 }
@@ -55,7 +55,7 @@ pub struct User {
     #[serde(skip_serializing)]
     pub salt: Vec<u8>,
     pub email: String,
-    pub permisions: Vec<Option<bool>>,
+    pub permissions_level: i16,
     pub trust: i32,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
@@ -113,8 +113,8 @@ pub struct Token {
 #[derive(Queryable, Selectable, Insertable)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct License {
-    license: i32,
-    text: String,
+    pub id: Uuid,
+    pub text: String,
 }
 
 #[derive(Queryable, Selectable, Associations, Insertable)]
