@@ -125,7 +125,7 @@ pub async fn sign_up(
                     salt: Vec::from(password_salt),
                     email: json.email,
                     token: Vec::from(token),
-                    expiry: SystemTime::now() + Duration::from_mins(15),
+                    expires: SystemTime::now() + Duration::from_mins(15),
                 };
 
                 insert_into(unverified_users::table)
@@ -214,7 +214,7 @@ pub async fn verify_email(
             .await
             .optional()?
         {
-            if user.token == token && user.expiry > SystemTime::now() {
+            if user.token == token && user.expires > SystemTime::now() {
                 let new_user: User = User {
                     id: user.id,
                     username: user.username,

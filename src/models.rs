@@ -12,6 +12,27 @@ pub enum ObjectType {
     Avatar = 1,
 }
 
+impl From<ObjectType> for &'static str {
+    fn from(value: ObjectType) -> Self {
+        match value {
+            ObjectType::World => "worlds",
+            ObjectType::Avatar => "avatars",
+        }
+    }
+}
+
+impl TryFrom<i16> for ObjectType {
+    type Error = ();
+
+    fn try_from(value: i16) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(ObjectType::World),
+            1 => Ok(ObjectType::Avatar),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(
     Queryable,
     Identifiable,
@@ -74,7 +95,7 @@ pub struct UnverifiedUser {
     pub salt: Vec<u8>,
     pub email: String,
     pub token: Vec<u8>,
-    pub expiry: SystemTime,
+    pub expires: SystemTime,
 }
 
 #[derive(Serialize, Queryable, Selectable, Debug)]
@@ -106,7 +127,7 @@ impl From<User> for PublicUserInfo {
 pub struct Token {
     pub user: Uuid,
     pub token: Vec<u8>,
-    pub expiry: SystemTime,
+    pub expires: SystemTime,
     pub renewable: bool,
 }
 

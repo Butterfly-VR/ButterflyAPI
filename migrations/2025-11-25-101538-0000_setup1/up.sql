@@ -13,7 +13,7 @@ CREATE TABLE "users" (
 	"instance" UUID,
 	"identifier" BYTEA,
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
-	"deleted_at" TIMESTAMP,
+	"delete_at" TIMESTAMP,
 	"can_login" BOOLEAN NOT NULL DEFAULT true,
 	"upload_quota_used" BIGINT NOT NULL,
 	"download_quota_used" BIGINT NOT NULL,
@@ -47,7 +47,6 @@ CREATE TABLE "notifications" (
 	"header" VARCHAR(128),
 	"body" TEXT,
 	"additional_data" JSONB,
-	"dismissed" BOOLEAN NOT NULL DEFAULT false,
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
 	"expires" TIMESTAMP,
 	PRIMARY KEY("id")
@@ -75,6 +74,7 @@ CREATE TABLE "user_reports" (
 	"details" VARCHAR(4096) NOT NULL,
 	"additional_data" JSONB,
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
+	"resolved" BOOLEAN NOT NULL DEFAULT false,
 	PRIMARY KEY("id")
 );
 
@@ -88,7 +88,7 @@ CREATE TABLE "unverified_users" (
 	"password" BYTEA NOT NULL,
 	"salt" BYTEA NOT NULL,
 	"token" BYTEA NOT NULL,
-	"expiry" TIMESTAMP NOT NULL,
+	"expires" TIMESTAMP NOT NULL,
 	"created_at" TIMESTAMP NOT NULL DEFAULT now(),
 	PRIMARY KEY("id")
 );
@@ -97,13 +97,13 @@ CREATE TABLE "tokens" (
 	"token" BYTEA NOT NULL UNIQUE,
 	"user" UUID NOT NULL,
 	"renewable" BOOLEAN NOT NULL,
-	"expiry" TIMESTAMP NOT NULL DEFAULT now(),
+	"expires" TIMESTAMP NOT NULL DEFAULT now(),
 	"last_used" TIMESTAMP NOT NULL DEFAULT now(),
 	PRIMARY KEY("token")
 );
 
 CREATE INDEX "tokens_user_index" ON "tokens" ("user");
-CREATE INDEX "tokens_expiry_index" ON "tokens" ("expiry");
+CREATE INDEX "tokens_expires_index" ON "tokens" ("expires");
 
 CREATE TABLE "chat_session_members" (
 	"session" UUID NOT NULL,
@@ -123,6 +123,7 @@ CREATE TABLE "chat_session_messages" (
 	"content" VARCHAR(4096) NOT NULL,
 	"sent_at" TIMESTAMP NOT NULL DEFAULT now(),
 	"modified_at" TIMESTAMP,
+	"delete_at" TIMESTAMP,
 	PRIMARY KEY("id")
 );
 
@@ -147,7 +148,7 @@ CREATE TABLE "objects" (
 	"license" UUID NOT NULL,
 	"encryption_key" BYTEA NOT NULL,
 	"encryption_iv" BYTEA NOT NULL,
-	"deleted_at" TIMESTAMP,
+	"delete_at" TIMESTAMP,
 	PRIMARY KEY("id")
 );
 

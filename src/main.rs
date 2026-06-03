@@ -10,6 +10,7 @@ use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use dotenvy::dotenv;
 use serde::Serialize;
+use std::env::args;
 use std::error::Error;
 use std::hint::black_box;
 use std::sync::Mutex;
@@ -21,6 +22,7 @@ mod gameserver_handler;
 mod hash;
 mod instance_api;
 mod instances;
+mod jobs;
 mod kube_resources;
 pub mod models;
 mod objects;
@@ -101,15 +103,25 @@ async fn main() {
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
+    let pool = Pool::builder()
+        .build(AsyncDieselConnectionManager::new(database_url))
+        .await
+        .expect("failed to connect to the database");
+    let s3_client = aws_sdk_s3::Client::new(&aws_config::load_from_env().await);
+
+    if args().find(|arg| arg == "--run_jobs").is_some() {
+        jobs::run_all_jobs(pool, s3_client).await;
+        return;
+    }
+
+    let kube_client = kube::Client::try_default()
+        .await
+        .expect("failed to connect to the kube api");
+
     let app_state: Arc<AppState> = Arc::new(AppState {
-        pool: Pool::builder()
-            .build(AsyncDieselConnectionManager::new(database_url))
-            .await
-            .expect("failed to connect to the database"),
-        s3_client: aws_sdk_s3::Client::new(&aws_config::load_from_env().await),
-        kube_client: kube::Client::try_default()
-            .await
-            .expect("failed to connect to the kube api"),
+        pool,
+        s3_client,
+        kube_client,
         hasher_memory: std::array::from_fn(|_| {
             Mutex::new(vec![argon2::Block::new(); HASHER_MEMORY as usize])
         }),

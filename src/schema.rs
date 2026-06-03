@@ -18,6 +18,7 @@ diesel::table! {
         content -> Varchar,
         sent_at -> Timestamp,
         modified_at -> Nullable<Timestamp>,
+        delete_at -> Nullable<Timestamp>,
     }
 }
 
@@ -76,7 +77,6 @@ diesel::table! {
         header -> Nullable<Varchar>,
         body -> Nullable<Text>,
         additional_data -> Nullable<Jsonb>,
-        dismissed -> Bool,
         created_at -> Timestamp,
         expires -> Nullable<Timestamp>,
     }
@@ -103,7 +103,7 @@ diesel::table! {
         license -> Uuid,
         encryption_key -> Bytea,
         encryption_iv -> Bytea,
-        deleted_at -> Nullable<Timestamp>,
+        delete_at -> Nullable<Timestamp>,
     }
 }
 
@@ -120,7 +120,7 @@ diesel::table! {
         token -> Bytea,
         user -> Uuid,
         renewable -> Bool,
-        expiry -> Timestamp,
+        expires -> Timestamp,
         last_used -> Timestamp,
     }
 }
@@ -135,7 +135,7 @@ diesel::table! {
         password -> Bytea,
         salt -> Bytea,
         token -> Bytea,
-        expiry -> Timestamp,
+        expires -> Timestamp,
         created_at -> Timestamp,
     }
 }
@@ -151,6 +151,7 @@ diesel::table! {
         details -> Varchar,
         additional_data -> Nullable<Jsonb>,
         created_at -> Timestamp,
+        resolved -> Bool,
     }
 }
 
@@ -170,7 +171,7 @@ diesel::table! {
         instance -> Nullable<Uuid>,
         identifier -> Nullable<Bytea>,
         created_at -> Timestamp,
-        deleted_at -> Nullable<Timestamp>,
+        delete_at -> Nullable<Timestamp>,
         can_login -> Bool,
         upload_quota_used -> Int8,
         download_quota_used -> Int8,

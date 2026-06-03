@@ -305,10 +305,7 @@ pub async fn get_object_file(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
-    let enum_str: &'static str = match object_type {
-        ObjectType::World => "worlds",
-        ObjectType::Avatar => "avatars",
-    };
+    let enum_str: &'static str = object_type.into();
 
     let object = state
         .s3_client
@@ -409,10 +406,7 @@ pub async fn get_object_image(
     state: State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
-    let enum_str: &'static str = match object_type {
-        ObjectType::World => "worlds",
-        ObjectType::Avatar => "avatars",
-    };
+    let enum_str: &'static str = object_type.into();
 
     let object = state
         .s3_client
