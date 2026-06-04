@@ -198,10 +198,13 @@ pub async fn create_or_update_object(
                     image_size: 0,
                     creator: user_id,
                     object_type: object_type as i16,
+                    likes: 0,
+                    dislikes: 0,
                     publicity: json.publicity,
                     encryption_key: json.encryption_key,
                     encryption_iv: json.encryption_iv,
                     license,
+                    delete_at: None,
                 };
 
                 diesel::insert_into(objects::table)

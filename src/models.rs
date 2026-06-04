@@ -33,6 +33,83 @@ impl TryFrom<i16> for ObjectType {
     }
 }
 
+enum PermissionsLevel {
+    Default = 0,
+    Moderator = 1,
+    Admin = 2,
+    Owner = 3,
+    Internal = 4,
+}
+
+impl From<PermissionsLevel> for i16 {
+    fn from(value: PermissionsLevel) -> Self {
+        value as i16
+    }
+}
+
+impl From<i16> for PermissionsLevel {
+    fn from(value: i16) -> Self {
+        match value {
+            0 => PermissionsLevel::Default,
+            1 => PermissionsLevel::Moderator,
+            2 => PermissionsLevel::Admin,
+            3 => PermissionsLevel::Owner,
+            4 => PermissionsLevel::Internal,
+            _ => PermissionsLevel::Default,
+        }
+    }
+}
+
+enum InstancePublicity {
+    Private = 0,
+    Friends = 1,
+    FriendsOfFriends = 2,
+    Public = 3,
+}
+
+impl From<InstancePublicity> for i16 {
+    fn from(value: InstancePublicity) -> Self {
+        value as i16
+    }
+}
+
+impl From<i16> for InstancePublicity {
+    fn from(value: i16) -> Self {
+        match value {
+            0 => InstancePublicity::Private,
+            1 => InstancePublicity::Friends,
+            2 => InstancePublicity::FriendsOfFriends,
+            3 => InstancePublicity::Public,
+            _ => InstancePublicity::Private,
+        }
+    }
+}
+
+enum ObjectPublicity {
+    Private = 0,
+    Friends = 1,
+    Unlisted = 2,
+    Public = 3,
+}
+
+impl From<ObjectPublicity> for i16 {
+    fn from(value: ObjectPublicity) -> Self {
+        value as i16
+    }
+}
+
+impl From<i16> for ObjectPublicity {
+    fn from(value: i16) -> Self {
+        match value {
+            0 => ObjectPublicity::Private,
+            1 => ObjectPublicity::Friends,
+            2 => ObjectPublicity::Unlisted,
+            3 => ObjectPublicity::Public,
+            _ => ObjectPublicity::Private,
+        }
+    }
+}
+
 #[derive(
     Queryable,
     Identifiable,
@@ -59,10 +136,13 @@ pub struct Object {
     pub image_size: i64,
     pub creator: Uuid,
     pub object_type: i16,
+    pub likes: i32,
+    pub dislikes: i32,
     pub publicity: i16,
     pub license: Uuid,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
+    pub delete_at: Option<SystemTime>,
 }
 
 #[derive(Queryable, Selectable, Insertable, Serialize)]
@@ -71,17 +151,21 @@ pub struct Object {
 pub struct User {
     pub id: Uuid,
     pub username: String,
+    pub email: String,
     #[serde(skip_serializing)]
     pub password: Vec<u8>,
     #[serde(skip_serializing)]
     pub salt: Vec<u8>,
-    pub email: String,
     pub permissions_level: i16,
     pub trust: i32,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
     pub instance: Option<Uuid>,
     pub identifier: Option<Vec<u8>>,
+    pub delete_at: Option<SystemTime>,
+    pub can_login: bool,
+    pub upload_quota_used: i64,
+    pub download_quota_used: i64,
 }
 
 #[derive(Queryable, Selectable, Insertable, Serialize)]
@@ -127,8 +211,8 @@ impl From<User> for PublicUserInfo {
 pub struct Token {
     pub user: Uuid,
     pub token: Vec<u8>,
-    pub expires: SystemTime,
     pub renewable: bool,
+    pub expires: SystemTime,
 }
 
 #[derive(Queryable, Selectable, Insertable)]

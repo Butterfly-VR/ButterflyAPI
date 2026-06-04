@@ -174,9 +174,11 @@ pub async fn get_user(
         .optional()
     {
         if requesting_user == user.id {
-            // todo: this is kinda jank
+            // homeworld and avatar need to be nullable to avoid circular dependacies
+            // but we want to always return something valid
+            // these values should corrospond to objects uploaded by the ButterflyDev account
             user.homeworld = Some(user.homeworld.unwrap_or(Uuid::nil()));
-            user.avatar = Some(user.avatar.unwrap_or(Uuid::from_u64_pair(0, 1))); // yeah thats not hacky at all
+            user.avatar = Some(user.avatar.unwrap_or(Uuid::from_u64_pair(0, 1)));
             return Ok(GetUserResult::User(Json(user)));
         }
         return Ok(GetUserResult::PublicUser(Json(user.into())));
@@ -227,6 +229,10 @@ pub async fn verify_email(
                     avatar: None,
                     instance: None,
                     identifier: None,
+                    delete_at: None,
+                    can_login: true,
+                    upload_quota_used: 0,
+                    download_quota_used: 0,
                 };
                 insert_into(users::table)
                     .values(new_user)
