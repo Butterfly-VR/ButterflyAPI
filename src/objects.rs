@@ -180,7 +180,10 @@ pub async fn create_or_update_object(
                     license_number
                 } else {
                     insert_into(licenses::table)
-                        .values(licenses::text.eq(&json.license))
+                        .values((
+                            licenses::text.eq(&json.license),
+                            licenses::id.eq(uuid::Uuid::new_v4()),
+                        ))
                         .returning(licenses::id)
                         .get_result(&mut conn)
                         .await?
