@@ -22,6 +22,7 @@ use uuid::Uuid;
 
 const INSTANCE_API_ROUTE: &str = "/internal";
 const INSTANCE_CLOSE_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/close_instance");
+const INSTANCE_ID_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/instance_id");
 const INSTANCE_USER_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/user/{user_id}");
 const INSTANCE_OBJECT_ROUTE: &str = constcat::concat!(INSTANCE_API_ROUTE, "/object/{object_id}");
 const INSTANCE_IDENTIFIER_VERIFY_ROUTE: &str =
@@ -29,6 +30,15 @@ const INSTANCE_IDENTIFIER_VERIFY_ROUTE: &str =
 
 pub async fn verify_instance_token() -> StatusCode {
     StatusCode::OK
+}
+
+#[derive(Serialize)]
+pub struct InstanceId {
+    id: Uuid,
+}
+
+pub async fn get_instance_id(Extension(id): Extension<Uuid>) -> Json<InstanceId> {
+    Json(InstanceId { id })
 }
 
 pub async fn close_instance(
@@ -130,10 +140,17 @@ struct VerifyIdentifierResponse {
 }
 
 async fn verify_identifier(
-    Path(identifier): Path<[u8; 8]>,
+    Path(identifier): Path<String>,
     State(app_state): State<Arc<AppState>>,
 ) -> Result<Json<VerifyIdentifierResponse>, ApiError> {
     let mut conn = app_state.pool.get().await?;
+
+    let mut out = [0u8; 8];
+    if hex::decode_to_slice(identifier, &mut out).is_err() {
+        return Err(ApiError::WithCode(StatusCode::BAD_REQUEST));
+    };
+    let identifier = out;
+
     let user_id = users::table
         .select(users::id)
         .filter(users::identifier.eq(&identifier))
@@ -144,6 +161,7 @@ async fn verify_identifier(
 
 pub fn instance_api_router(app_state: Arc<AppState>) -> Router {
     Router::new()
+        .route(INSTANCE_ID_ROUTE, get(get_instance_id))
         .route(INSTANCE_API_ROUTE, get(verify_instance_token))
         .route(INSTANCE_CLOSE_ROUTE, get(close_instance))
         .route(INSTANCE_USER_ROUTE, get(get_user))

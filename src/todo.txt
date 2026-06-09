@@ -14,7 +14,7 @@ figured out ips use the taefik header thing
 8. per ip hourly login limit (~5) success or fail
 
 9. dedicated server asset variants
-10. respect content privacy
+10. respect content privacy (also restrict private content downloading based on permission + instance relations)
 11. password recovery
 12. moderation api
 
