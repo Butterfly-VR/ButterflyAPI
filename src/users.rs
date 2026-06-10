@@ -48,7 +48,7 @@ pub async fn sign_up(
     let mut conn = state.pool.get().await?;
     let state = state.clone();
 
-    if json.username.len() < 6 || json.username.len() > 32 || json.email.len() > 128 {
+    if json.username.len() < 3 || json.username.len() > 32 || json.email.len() > 128 {
         return Err(ApiError::WithResponse(
             StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
