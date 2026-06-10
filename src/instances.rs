@@ -107,6 +107,7 @@ pub struct InstanceInfo {
     pub world: Uuid,
     pub name: String,
     pub max_players: i16,
+    pub current_players: i16,
     pub publicity: i16,
     pub anyone_can_invite: bool,
     pub is_gameserver: bool,
@@ -114,13 +115,14 @@ pub struct InstanceInfo {
     pub port: u16,
 }
 
-impl From<Instance> for InstanceInfo {
-    fn from(instance: Instance) -> Self {
+impl InstanceInfo {
+    pub fn new(instance: Instance, current_players: i16) -> Self {
         Self {
             id: instance.id,
             world: instance.world,
             name: instance.name,
             max_players: instance.max_players,
+            current_players,
             publicity: instance.publicity,
             anyone_can_invite: instance.anyone_can_invite,
             is_gameserver: instance.is_gameserver,
@@ -166,7 +168,6 @@ pub async fn search_instances(
                     );
                 } else {
                     query = query.having(
-                        // im probably holding it wrong but i cant find any other way to cast smallint to bigint
                         count(users::id).ne(sql::<BigInt>("CAST(")
                             .bind(instances::max_players)
                             .sql(" AS BIGINT)")),
@@ -188,9 +189,11 @@ pub async fn search_instances(
                 .map_err(ApiError::from)
                 .map(|x| {
                     x.into_iter()
-                        .map(|(instance, _): (Instance, i64)| instance.into())
+                        .map(|(instance, current_players): (Instance, i64)| {
+                            InstanceInfo::new(instance, current_players as i16)
+                        })
                         .collect::<Vec<InstanceInfo>>()
-                        .into() // extract the instances and ignore the player count
+                        .into()
                 })
                 .map(Json)
         }
@@ -204,12 +207,14 @@ pub async fn get_instance(
 ) -> Result<Json<InstanceInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
     instances::table
-        .select(Instance::as_select())
+        .left_join(users::table)
+        .group_by(instances::id)
+        .select((Instance::as_select(), count(users::id.nullable())))
         .filter(instances::id.eq(id))
-        .first::<Instance>(&mut conn)
+        .first::<(Instance, i64)>(&mut conn)
         .await
         .map_err(ApiError::from)
-        .map(Into::into)
+        .map(|(instance, current_players)| InstanceInfo::new(instance, current_players as i16))
         .map(Json)
 }
 
