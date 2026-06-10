@@ -1,5 +1,4 @@
-1. working instance api
-1.5. better logging
+1.5. user statuses
 1.8. readonly pool
 
 2. user content size limits (100mb, more for supporter accounts)

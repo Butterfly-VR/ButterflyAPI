@@ -34,6 +34,7 @@ use std::net::SocketAddr;
 
 const ROUTE_ORIGIN: &str = "/api/v0";
 const COFFEE_ORIGIN: &str = "/api/v0/coffee";
+const HEALTH_CHECK_ORIGIN: &str = "/api/v0/health";
 
 // argon2 needs to allocate a lot of memory for hashing,
 // since allocating at runtime is slow and could cause ooms
@@ -130,8 +131,9 @@ async fn main() {
     let health_check_state = app_state.clone();
 
     let app = Router::new()
+        .route(ROUTE_ORIGIN, get(async move || http::StatusCode::OK))
         .route(
-            ROUTE_ORIGIN,
+            HEALTH_CHECK_ORIGIN,
             get(async move || {
                 // this route is used as a health check
                 // so we should check the database connection and clients
