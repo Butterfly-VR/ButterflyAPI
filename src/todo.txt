@@ -1,6 +1,3 @@
-1.5. user statuses
-1.8. readonly pool
-
 2. user content size limits (100mb, more for supporter accounts)
 2.5. also limits total size for licenses
 3. upload / download(?) limits per user (~50GB up 150GB down per month)
@@ -13,8 +10,12 @@ figured out ips use the taefik header thing
 8. per ip hourly login limit (~5) success or fail
 
 9. dedicated server asset variants
+9.5. optimize dedicated server
+
 10. respect content privacy (also restrict private content downloading based on permission + instance relations)
 11. password recovery
+
 12. moderation api
 
 13. friend api
+13.5. user statuses

@@ -10,9 +10,11 @@ pub async fn run_instance_cleanup(
 ) {
     delete(instances::table)
         .filter(
-            instances::id
-                .nullable()
-                .ne_all(users::table.select(users::instance)),
+            instances::id.nullable().ne_all(
+                users::table
+                    .select(users::instance)
+                    .filter(users::instance.is_not_null()),
+            ),
         )
         .execute(conn)
         .await
