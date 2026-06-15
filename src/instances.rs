@@ -3,7 +3,10 @@ use crate::AppState;
 use crate::auth;
 use crate::gameserver_handler::allocate_gameserver;
 use crate::models::Instance;
+use crate::models::InstancePublicity;
+use crate::models::ObjectPublicity;
 use crate::schema::instances;
+use crate::schema::objects;
 use crate::schema::users;
 use axum::Extension;
 use axum::extract::Path;
@@ -148,9 +151,12 @@ pub async fn search_instances(
         {
             let mut query = instances::table
                 .left_join(users::table)
+                .left_join(objects::table)
                 .group_by(instances::id)
                 .select((Instance::as_select(), count(users::id.nullable())))
                 .filter(instances::world.eq(search.world))
+                .filter(objects::publicity.eq(ObjectPublicity::Public as i16))
+                .filter(instances::publicity.eq(InstancePublicity::Public as i16))
                 .limit(100)
                 .into_boxed();
 

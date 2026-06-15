@@ -1,6 +1,7 @@
 use crate::ApiError;
 use crate::AppState;
 use crate::auth;
+use crate::models::ObjectPublicity;
 use crate::models::PublicUserInfo;
 use crate::schema::objects;
 use crate::schema::tags;
@@ -165,6 +166,7 @@ pub async fn search_objects(
         .inner_join(users::table.on(users::id.eq(objects::creator)))
         .or_filter(users::username.like(format!("%{search_term}%")))
         .filter(objects::object_type.eq(object_type as i16))
+        .filter(objects::publicity.eq(ObjectPublicity::Public as i16))
         .limit(500)
         .into_boxed();
 

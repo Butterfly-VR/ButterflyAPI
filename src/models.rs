@@ -33,7 +33,7 @@ impl TryFrom<i16> for ObjectType {
     }
 }
 
-enum PermissionsLevel {
+pub enum PermissionsLevel {
     Default = 0,
     Moderator = 1,
     Admin = 2,
@@ -60,7 +60,7 @@ impl From<i16> for PermissionsLevel {
     }
 }
 
-enum InstancePublicity {
+pub enum InstancePublicity {
     InviteOnly = 0,
     Friends = 1,
     FriendsOfFriends = 2,

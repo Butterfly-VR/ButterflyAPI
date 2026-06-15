@@ -10,12 +10,17 @@ use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use dotenvy::dotenv;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::env::args;
 use std::error::Error;
 use std::hint::black_box;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicU64;
+use std::time::{Duration, Instant};
 use std::{env, sync::Arc};
+use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
+use uuid::Uuid;
 mod auth;
 mod email;
 mod gameserver_handler;
@@ -89,6 +94,21 @@ struct AppState {
     s3_client: aws_sdk_s3::Client,
     kube_client: kube::Client,
     hasher_memory: [Mutex<Vec<argon2::Block>>; HASHER_MEMORY_BLOCKS],
+    user_rate_limits: Arc<RwLock<HashMap<Uuid, RateLimitInfo>>>,
+}
+
+struct RateLimitInfo {
+    total_requests: AtomicU64,
+    next_reset: Instant,
+}
+
+impl RateLimitInfo {
+    fn new(reset_interval: Duration) -> Self {
+        Self {
+            total_requests: AtomicU64::new(0),
+            next_reset: Instant::now() + reset_interval,
+        }
+    }
 }
 
 #[tokio::main]
@@ -127,6 +147,7 @@ async fn main() {
         hasher_memory: std::array::from_fn(|_| {
             Mutex::new(vec![argon2::Block::new(); HASHER_MEMORY as usize])
         }),
+        user_rate_limits: Arc::new(RwLock::new(HashMap::with_capacity(1024))),
     });
 
     let health_check_state = app_state.clone();

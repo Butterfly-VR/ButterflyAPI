@@ -1,4 +1,5 @@
 use crate::{ApiError, AppState, schema::instances};
+use crate::{RateLimitInfo, schema};
 use axum::{
     body::Body,
     extract::State,
@@ -9,10 +10,13 @@ use axum::{
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use schema::tokens::dsl::{expires, token, tokens, user};
+use std::sync::atomic::AtomicU64;
+use std::time::Instant;
 use std::{sync::Arc, time::SystemTime};
 use uuid::Uuid;
 
-use crate::schema;
+const RATE_LIMIT_WINDOW: std::time::Duration = std::time::Duration::from_hours(1);
+const RATE_LIMIT_THRESHOLD: u64 = 2000;
 
 pub async fn check_auth(
     state: State<Arc<AppState>>,
@@ -34,6 +38,39 @@ pub async fn check_auth(
         .await
         .optional()
     {
+        let rate_limit_info = state.user_rate_limits.read().await;
+
+        // only aquire write lock if we need to insert
+        if let Some(info) = rate_limit_info.get(&user_id) {
+            if info.next_reset < Instant::now() {
+                drop(rate_limit_info);
+                state
+                    .user_rate_limits
+                    .write()
+                    .await
+                    .insert(user_id, RateLimitInfo::new(RATE_LIMIT_WINDOW));
+            } else {
+                if AtomicU64::load(&info.total_requests, std::sync::atomic::Ordering::Relaxed)
+                    >= RATE_LIMIT_THRESHOLD
+                {
+                    return Err(ApiError::WithCode(StatusCode::TOO_MANY_REQUESTS));
+                }
+
+                AtomicU64::fetch_add(
+                    &info.total_requests,
+                    1,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
+            }
+        } else {
+            drop(rate_limit_info);
+            state
+                .user_rate_limits
+                .write()
+                .await
+                .insert(user_id, RateLimitInfo::new(RATE_LIMIT_WINDOW));
+        }
+
         req.extensions_mut().insert(user_id);
         return Ok(next.run(req).await);
     }
