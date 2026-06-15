@@ -61,7 +61,7 @@ impl From<i16> for PermissionsLevel {
 }
 
 enum InstancePublicity {
-    Private = 0,
+    InviteOnly = 0,
     Friends = 1,
     FriendsOfFriends = 2,
     Public = 3,
@@ -76,16 +76,16 @@ impl From<InstancePublicity> for i16 {
 impl From<i16> for InstancePublicity {
     fn from(value: i16) -> Self {
         match value {
-            0 => InstancePublicity::Private,
+            0 => InstancePublicity::InviteOnly,
             1 => InstancePublicity::Friends,
             2 => InstancePublicity::FriendsOfFriends,
             3 => InstancePublicity::Public,
-            _ => InstancePublicity::Private,
+            _ => InstancePublicity::InviteOnly,
         }
     }
 }
 
-enum ObjectPublicity {
+pub enum ObjectPublicity {
     Private = 0,
     Friends = 1,
     Unlisted = 2,

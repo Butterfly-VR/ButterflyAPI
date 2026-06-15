@@ -4,10 +4,12 @@ use crate::ErrorCode;
 use crate::ErrorInfo;
 use crate::auth::check_auth;
 use crate::models;
+use crate::models::ObjectPublicity;
 use crate::models::{Object, ObjectType};
 use crate::schema::licenses;
 use crate::schema::objects;
 use crate::schema::tags;
+use crate::schema::users;
 use aws_sdk_s3::Client;
 use aws_sdk_s3::primitives::ByteStream;
 use axum::Extension;
@@ -17,8 +19,10 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get};
+use diesel::dsl::sql;
 use diesel::insert_into;
 use diesel::prelude::*;
+use diesel::sql_types::BigInt;
 use diesel_async::AsyncConnection;
 use diesel_async::RunQueryDsl;
 use futures_util::TryStreamExt;
@@ -34,6 +38,8 @@ use uuid::Uuid;
 const OBJECT_INFO_ROUTE: &str = "/{object_type}/{uuid}";
 const OBJECT_DOWNLOAD_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/epck");
 const OBJECT_IMAGE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/image");
+const MAX_TOTAL_UPLOADED_KB: usize = 1024 * 100;
+const MAX_OBJECTS_PER_USER: i64 = 100;
 
 #[derive(Deserialize)]
 pub struct ObjectUpload {
@@ -55,7 +61,11 @@ pub async fn create_or_update_object(
 ) -> Result<(), ApiError> {
     let mut conn = state.pool.get().await?;
 
-    if json.name.len() < 6 || json.name.len() > 32 || json.description.len() > 4096 {
+    if json.name.len() < 6
+        || json.name.len() > 32
+        || json.description.len() > 4096
+        || json.license.len() > 1024 * 1024 * 10
+    {
         return Err(ApiError::WithResponse(
             StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
@@ -151,6 +161,27 @@ pub async fn create_or_update_object(
                     .await?;
             } else {
                 // create new object
+
+                if objects::table
+                    .select(diesel::dsl::count(objects::id))
+                    .left_join(users::table.on(users::id.eq(objects::creator)))
+                    .group_by(objects::creator)
+                    .filter(users::id.eq(user_id))
+                    .first::<i64>(&mut conn)
+                    .await?
+                    > MAX_OBJECTS_PER_USER
+                {
+                    return Err(ApiError::WithResponse(
+                        StatusCode::BAD_REQUEST,
+                        Json(ErrorInfo {
+                            error_code: ErrorCode::InsufficientSpace,
+                            error_message: Some(
+                                "You have reached the maximum number of objects per user"
+                                    .to_owned(),
+                            ),
+                        }),
+                    ));
+                }
 
                 if objects::table
                     .count()
@@ -369,6 +400,30 @@ pub async fn change_object_file(
             .execute(&mut conn)
             .await?;
 
+        let total_uploaded_objects_kb = objects::table
+            .select(
+                sql::<BigInt>("CAST(")
+                    .bind(diesel::dsl::sum(objects::object_size))
+                    .sql(" AS BIGINT)"),
+            )
+            .filter(objects::creator.eq(user_id))
+            .filter(objects::publicity.ne(ObjectPublicity::Public as i16))
+            .get_result::<i64>(&mut conn)
+            .await
+            .unwrap_or(0);
+        let total_uploaded_images_kb = objects::table
+            .select(
+                sql::<BigInt>("CAST(")
+                    .bind(diesel::dsl::sum(objects::image_size))
+                    .sql(" AS BIGINT)"),
+            )
+            .filter(objects::creator.eq(user_id))
+            .filter(objects::publicity.ne(ObjectPublicity::Public as i16))
+            .get_result::<i64>(&mut conn)
+            .await
+            .unwrap_or(0);
+        let total_uploaded_kb = total_uploaded_objects_kb + total_uploaded_images_kb;
+
         upload_object_stream(
             &state.s3_client,
             enum_str,
@@ -376,6 +431,7 @@ pub async fn change_object_file(
             &mut tokio_util::io::StreamReader::new(stream.map_err(|_| {
                 std::io::Error::new(std::io::ErrorKind::NotFound, "no error handling here")
             })),
+            MAX_TOTAL_UPLOADED_KB - total_uploaded_kb as usize,
         )
         .await?;
 
@@ -470,6 +526,30 @@ pub async fn change_object_image(
             .execute(&mut conn)
             .await?;
 
+        let total_uploaded_objects_kb = objects::table
+            .select(
+                sql::<BigInt>("CAST(")
+                    .bind(diesel::dsl::sum(objects::object_size))
+                    .sql(" AS BIGINT)"),
+            )
+            .filter(objects::creator.eq(user_id))
+            .filter(objects::publicity.ne(ObjectPublicity::Public as i16))
+            .get_result::<i64>(&mut conn)
+            .await
+            .unwrap_or(0);
+        let total_uploaded_images_kb = objects::table
+            .select(
+                sql::<BigInt>("CAST(")
+                    .bind(diesel::dsl::sum(objects::image_size))
+                    .sql(" AS BIGINT)"),
+            )
+            .filter(objects::creator.eq(user_id))
+            .filter(objects::publicity.ne(ObjectPublicity::Public as i16))
+            .get_result::<i64>(&mut conn)
+            .await
+            .unwrap_or(0);
+        let total_uploaded_kb = total_uploaded_objects_kb + total_uploaded_images_kb;
+
         upload_object_stream(
             &state.s3_client,
             &(enum_str.to_owned() + "-images"),
@@ -477,6 +557,7 @@ pub async fn change_object_image(
             &mut tokio_util::io::StreamReader::new(stream.map_err(|_| {
                 std::io::Error::new(std::io::ErrorKind::NotFound, "no error handling here")
             })),
+            MAX_TOTAL_UPLOADED_KB - total_uploaded_kb as usize,
         )
         .await?;
 
@@ -514,6 +595,7 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     bucket: &str,
     key: &str,
     stream: &mut S,
+    available_space_kb: usize,
 ) -> Result<(), ApiError> {
     // 10MB
     const CHUNK_SIZE: usize = 10 * 1024 * 1024;
@@ -534,9 +616,18 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
             break;
         }
     }
-    first_chunk.resize(total_read_size, 0);
+    first_chunk.truncate(total_read_size);
 
     if first_chunk.len() < MAX_PUT_SIZE {
+        if first_chunk.len() > (available_space_kb * 1024) {
+            return Err(ApiError::WithResponse(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::InsufficientSpace,
+                    error_message: Some("Not enough space".to_string()),
+                }),
+            ));
+        }
         client
             .put_object()
             .bucket(bucket)
@@ -546,6 +637,8 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
             .await?;
         return Ok(());
     }
+
+    let mut object_size: usize = first_chunk.len();
 
     let multipart_upload = client
         .create_multipart_upload()
@@ -560,6 +653,7 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     let mut parts: Vec<aws_sdk_s3::types::CompletedPart> = vec![];
 
     for chunk in first_chunk.chunks_exact(CHUNK_SIZE) {
+        object_size += CHUNK_SIZE;
         #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         let part_number = parts.len() as i32 + 1;
         let part = client
@@ -581,21 +675,42 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
         parts.push(part);
     }
 
+    let remainder = first_chunk.chunks_exact(CHUNK_SIZE).remainder();
+    let remainder_len = remainder.len();
+    let mut chunk = remainder.iter().copied().collect::<Vec<_>>();
+    chunk.resize(CHUNK_SIZE, 0);
+    let mut total_read_size = remainder_len;
+
     loop {
-        let mut chunk = vec![0u8; CHUNK_SIZE];
-        let mut total_read_size: usize = 0;
         loop {
             let read_size: usize = stream.read(&mut chunk[total_read_size..]).await?;
             if read_size == 0 {
                 break;
             }
             total_read_size += read_size;
-            debug_assert!(total_read_size <= MAX_PUT_SIZE);
-            if total_read_size == MAX_PUT_SIZE {
+            if total_read_size == CHUNK_SIZE {
                 break;
             }
         }
         chunk.resize(total_read_size, 0);
+        object_size += total_read_size;
+
+        if object_size > available_space_kb * 1024 {
+            client
+                .abort_multipart_upload()
+                .bucket(bucket)
+                .key(key)
+                .upload_id(&upload_id)
+                .send()
+                .await?;
+            return Err(ApiError::WithResponse(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::InsufficientSpace,
+                    error_message: Some("Not enough space".to_string()),
+                }),
+            ));
+        }
 
         if chunk.is_empty() {
             break;
@@ -621,6 +736,9 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
             .part_number(part_number)
             .build();
         parts.push(part);
+
+        chunk = vec![0u8; CHUNK_SIZE];
+        total_read_size = 0;
     }
 
     let completed_multipart_upload = aws_sdk_s3::types::CompletedMultipartUpload::builder()

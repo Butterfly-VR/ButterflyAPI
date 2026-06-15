@@ -51,6 +51,7 @@ enum ErrorCode {
     InsufficientPermissions,
     BadRequestLength,
     InvalidRequest,
+    InsufficientSpace,
 }
 
 enum ApiError {

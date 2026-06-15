@@ -1,18 +1,18 @@
-2. user content size limits (100mb, more for supporter accounts)
-2.5. also limits total size for licenses
 3. upload / download(?) limits per user (~50GB up 150GB down per month)
-4. overall rate limit per user (~5000 per hour)
-5. cache control headers on everything
+4. overall rate limit per user (~2000 per hour) per api pod
+5. respect content privacy during search
 6. cache user uploads
 
 figured out ips use the taefik header thing
 7. per ip account creation limit (10 per year)
 8. per ip hourly login limit (~5) success or fail
 
+important things done
+
 9. dedicated server asset variants
 9.5. optimize dedicated server
 
-10. respect content privacy (also restrict private content downloading based on permission + instance relations)
+10. respect content privacy everywhere (also restrict private content downloading based on permission + instance relations)
 11. password recovery
 
 12. moderation api
