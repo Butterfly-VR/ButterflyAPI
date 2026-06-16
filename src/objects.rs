@@ -3,6 +3,7 @@ use crate::AppState;
 use crate::ErrorCode;
 use crate::ErrorInfo;
 use crate::auth::check_auth;
+use crate::file_cache;
 use crate::models;
 use crate::models::ObjectPublicity;
 use crate::models::{Object, ObjectType};
@@ -33,6 +34,7 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
+use tokio::spawn;
 use uuid::Uuid;
 
 const OBJECT_INFO_ROUTE: &str = "/{object_type}/{uuid}";
@@ -339,10 +341,35 @@ pub async fn get_object_info(
 }
 
 pub async fn get_object_file(
-    state: State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
     let enum_str: &'static str = object_type.into();
+    if let Some(cache_entry) = state.object_cache.get(&object_id).await {
+        let mut conn = state.pool.get().await?;
+
+        if objects::table
+            .select(objects::updated_at)
+            .find(object_id)
+            .first::<SystemTime>(&mut conn)
+            .await
+            .map(|updated_at| updated_at < cache_entry.cached_at)?
+        {
+            return Ok(Body::from_stream(file_cache::CacheFileStream::new(
+                cache_entry.file,
+            )));
+        }
+        state.object_cache.invalidate(&object_id).await;
+    }
+    {
+        let state = state.clone();
+        let object_id = object_id.clone();
+        let _ = spawn(async move {
+            let _ =
+                file_cache::cache_object(state.clone(), &state.object_cache, object_id, enum_str)
+                    .await;
+        });
+    }
 
     let object = state
         .s3_client
@@ -382,6 +409,8 @@ pub async fn change_object_file(
                 }),
             ));
         }
+
+        state.object_cache.invalidate(&object_id).await;
 
         let stream = body.into_data_stream();
 
@@ -465,15 +494,43 @@ pub async fn change_object_file(
 }
 
 pub async fn get_object_image(
-    state: State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
     let enum_str: &'static str = object_type.into();
+    let enum_str = enum_str.to_owned() + "-images";
+
+    if let Some(cache_entry) = state.image_cache.get(&object_id).await {
+        let mut conn = state.pool.get().await?;
+
+        if objects::table
+            .select(objects::updated_at)
+            .find(object_id)
+            .first::<SystemTime>(&mut conn)
+            .await
+            .map(|updated_at| updated_at < cache_entry.cached_at)?
+        {
+            return Ok(Body::from_stream(file_cache::CacheFileStream::new(
+                cache_entry.file,
+            )));
+        }
+        state.image_cache.invalidate(&object_id).await;
+    }
+    {
+        let state = state.clone();
+        let object_id = object_id.clone();
+        let enum_str = enum_str.clone();
+        let _ = spawn(async move {
+            let _ =
+                file_cache::cache_object(state.clone(), &state.image_cache, object_id, &enum_str)
+                    .await;
+        });
+    }
 
     let object = state
         .s3_client
         .get_object()
-        .bucket(enum_str.to_owned() + "-images")
+        .bucket(enum_str)
         .key(object_id.to_string())
         .send()
         .await?;
@@ -508,6 +565,8 @@ pub async fn change_object_image(
                 }),
             ));
         }
+
+        state.image_cache.invalidate(&object_id).await;
 
         let stream = body.into_data_stream();
 

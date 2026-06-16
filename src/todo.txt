@@ -1,10 +1,9 @@
-6. cache user uploads
+7. per ip account creation limit (5 per month)
+8. per ip hourly login limit (10) per fail
 
-figured out ips use the taefik header thing
-7. per ip account creation limit (10 per year)
-8. per ip hourly login limit (~5) success or fail
+client work
 
-important things done
+setup dev server
 
 9. dedicated server asset variants
 9.5. optimize dedicated server
@@ -16,3 +15,5 @@ important things done
 13. friend api
 13.5. user statuses
 14. respect content privacy everywhere (also restrict private content downloading based on permission + instance relations)
+
+15. instance server

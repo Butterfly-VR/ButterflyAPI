@@ -13,16 +13,18 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::env::args;
 use std::error::Error;
+use std::fs;
 use std::hint::black_box;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use std::{env, sync::Arc};
 use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 mod auth;
 mod email;
+mod file_cache;
 mod gameserver_handler;
 mod hash;
 mod instance_api;
@@ -40,6 +42,8 @@ use std::net::SocketAddr;
 const ROUTE_ORIGIN: &str = "/api/v0";
 const COFFEE_ORIGIN: &str = "/api/v0/coffee";
 const HEALTH_CHECK_ORIGIN: &str = "/api/v0/health";
+// should be equal to the size of the emptydir
+const CACHE_SIZE_KB: u64 = 1024 * 1024 * 10;
 
 // argon2 needs to allocate a lot of memory for hashing,
 // since allocating at runtime is slow and could cause ooms
@@ -94,10 +98,19 @@ struct AppState {
     s3_client: aws_sdk_s3::Client,
     kube_client: kube::Client,
     hasher_memory: [Mutex<Vec<argon2::Block>>; HASHER_MEMORY_BLOCKS],
-    user_rate_limits: Arc<RwLock<HashMap<Uuid, RateLimitInfo>>>,
+    user_rate_limits: RwLock<HashMap<Uuid, RateLimitInfo>>,
+    object_cache: moka::future::Cache<Uuid, CacheEntry>,
+    image_cache: moka::future::Cache<Uuid, CacheEntry>,
 }
 
-struct RateLimitInfo {
+#[derive(Debug, Clone)]
+pub struct CacheEntry {
+    cached_at: SystemTime,
+    size_kb: u32,
+    file: Arc<fs::File>,
+}
+
+pub struct RateLimitInfo {
     total_requests: AtomicU64,
     next_reset: Instant,
 }
@@ -147,7 +160,19 @@ async fn main() {
         hasher_memory: std::array::from_fn(|_| {
             Mutex::new(vec![argon2::Block::new(); HASHER_MEMORY as usize])
         }),
-        user_rate_limits: Arc::new(RwLock::new(HashMap::with_capacity(1024))),
+        user_rate_limits: RwLock::new(HashMap::with_capacity(1024)),
+        object_cache: moka::future::Cache::builder()
+            .max_capacity(CACHE_SIZE_KB)
+            .initial_capacity(1000)
+            // max of 1000 entries
+            .weigher(|_, v: &CacheEntry| v.size_kb.min((CACHE_SIZE_KB / 1000) as u32))
+            .build(),
+        image_cache: moka::future::Cache::builder()
+            .max_capacity(CACHE_SIZE_KB)
+            .initial_capacity(1000)
+            // max of 1000 entries
+            .weigher(|_, v: &CacheEntry| v.size_kb.min((CACHE_SIZE_KB / 1000) as u32))
+            .build(),
     });
 
     let health_check_state = app_state.clone();
@@ -180,6 +205,7 @@ async fn main() {
         )
         .route(
             COFFEE_ORIGIN,
+            // this is also used as a liveness check
             get(|| async { http::StatusCode::IM_A_TEAPOT }),
         )
         .nest(ROUTE_ORIGIN, users::users_router(app_state.clone()))

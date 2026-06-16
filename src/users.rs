@@ -195,7 +195,7 @@ pub async fn get_user(
 pub async fn verify_email(
     State(state): State<Arc<AppState>>,
     Path((usr_id, token)): Path<(Uuid, String)>,
-) -> Result<(), ApiError> {
+) -> Result<&'static str, ApiError> {
     let Ok(token) = hex::decode(token) else {
         return Err(ApiError::WithResponse(
             StatusCode::BAD_REQUEST,
@@ -242,7 +242,7 @@ pub async fn verify_email(
                     .filter(unverified_users::id.eq(usr_id))
                     .execute(&mut conn)
                     .await?;
-                Ok(())
+                Ok("Your email has been verified. You may now close this page.")
             } else {
                 Err(ApiError::WithResponse(
                     StatusCode::BAD_REQUEST,
