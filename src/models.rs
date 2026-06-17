@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;
 
-use crate::schema::{instances, licenses, objects, tags, tokens, unverified_users, users};
+use crate::schema::{
+    instances, ip_infos, licenses, objects, tags, tokens, unverified_users, users,
+};
 
 // diesel dosent like enums so we dont define these on db
 #[derive(Deserialize, Clone, Copy)]
@@ -244,4 +246,14 @@ pub struct Instance {
     pub is_gameserver: bool,
     pub ip: ipnet::IpNet,
     pub port: i32,
+}
+
+#[derive(Queryable, Selectable, Insertable)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct IpInfo {
+    pub ip: ipnet::IpNet,
+    pub accounts_created: i16,
+    pub account_creation_count_reset: SystemTime,
+    pub login_attempts: i16,
+    pub login_attempts_reset: SystemTime,
 }

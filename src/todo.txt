@@ -1,12 +1,12 @@
-7. per ip account creation limit (5 per month)
-8. per ip hourly login limit (10) per fail
-
 client work
 
 setup dev server
 
+8.3. retain old object keys
+8.5. readonly db pool
 9. dedicated server asset variants
 9.5. optimize dedicated server
+9.8. trending / popular sorting via decaying visits sum (weekly visits entry + next reset, recent visits = weekly + recent / 2, average visits = average * 7 + weekly / 8)
 
 11. password recovery
 

@@ -7,27 +7,32 @@ use crate::email::EmailType;
 use crate::email::check_email;
 use crate::email::send_email;
 use crate::hash::hash_password;
+use crate::models::IpInfo;
 use crate::models::{PublicUserInfo, UnverifiedUser, User};
+use crate::schema::ip_infos;
 use crate::schema::unverified_users;
 use crate::schema::users;
 use axum::Extension;
 use axum::extract::Path;
 use axum::extract::State;
-use axum::http;
+use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::response::IntoResponse;
 use axum::{Json, Router, routing::get, routing::post};
 use diesel::insert_into;
 use diesel::prelude::*;
+use diesel::update;
 use diesel_async::{AsyncConnection, RunQueryDsl};
+use ipnet::IpNet;
 use rand::TryRng;
 use rand::rngs::SysRng;
 use serde::Deserialize;
+use std::net::IpAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::SystemTime;
-use tracing::info;
 use uuid::Uuid;
 
 const USERS_ROUTE: &str = "/user";
@@ -43,8 +48,13 @@ pub struct SignUpRequest {
 
 pub async fn sign_up(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(json): Json<SignUpRequest>,
 ) -> Result<(), ApiError> {
+    const ACCOUNT_CREATION_LIMIT: i16 = 15;
+    // every year
+    const ACCOUNT_CREATION_LIMIT_RESET_DURATION: Duration = Duration::from_hours(24 * 365);
+
     let mut conn = state.pool.get().await?;
     let state = state.clone();
 
@@ -53,9 +63,7 @@ pub async fn sign_up(
             StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
                 error_code: ErrorCode::BadRequestLength,
-                error_message: Some(String::from(
-                    "Username or email was wrong length. This shouldnt happen",
-                )),
+                error_message: Some(String::from("Username or email was wrong length.")),
             }),
         ));
     }
@@ -65,13 +73,55 @@ pub async fn sign_up(
             StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
                 error_code: ErrorCode::InvalidRequest,
-                error_message: Some(String::from("Invalid email. This shouldnt happen")),
+                error_message: Some(String::from("Invalid email.")),
             }),
         ));
     }
 
     conn.transaction(async |mut conn| {
         {
+            let ip = headers
+                .get("x-forwarded-for")
+                .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?;
+            let ip = IpNet::new(IpAddr::from_str(ip.to_str()?)?, 24)?;
+
+            if let Some(ip_info) = update(ip_infos::table.filter(ip_infos::ip.eq(ip)))
+                .set(ip_infos::accounts_created.eq(ip_infos::accounts_created + 1))
+                .returning((
+                    ip_infos::accounts_created,
+                    ip_infos::account_creation_count_reset,
+                ))
+                .get_result::<(i16, SystemTime)>(&mut conn)
+                .await
+                .optional()?
+            {
+                if ip_info.1 < SystemTime::now() {
+                    update(ip_infos::table.filter(ip_infos::ip.eq(ip)))
+                        .set((
+                            ip_infos::accounts_created.eq(0),
+                            ip_infos::account_creation_count_reset
+                                .eq(SystemTime::now() + ACCOUNT_CREATION_LIMIT_RESET_DURATION),
+                        ))
+                        .execute(&mut conn)
+                        .await?;
+                } else if ip_info.0 >= ACCOUNT_CREATION_LIMIT {
+                    return Err(ApiError::WithCode(StatusCode::TOO_MANY_REQUESTS));
+                }
+            } else {
+                let entry = IpInfo {
+                    ip,
+                    accounts_created: 1,
+                    account_creation_count_reset: SystemTime::now()
+                        + ACCOUNT_CREATION_LIMIT_RESET_DURATION,
+                    login_attempts: 0,
+                    login_attempts_reset: SystemTime::now(),
+                };
+                insert_into(ip_infos::table)
+                    .values(entry)
+                    .execute(&mut conn)
+                    .await?;
+            }
+
             if users::table
                 .count()
                 .filter(users::username.eq(&json.username))
@@ -81,7 +131,7 @@ pub async fn sign_up(
                 != 0
             {
                 return Err(ApiError::WithResponse(
-                    http::StatusCode::BAD_REQUEST,
+                    StatusCode::BAD_REQUEST,
                     Json(ErrorInfo {
                         error_code: ErrorCode::AlreadyExists,
                         error_message: Some(String::from("Username or email already in use.")),
@@ -92,54 +142,48 @@ pub async fn sign_up(
             let mut password_salt = [0; 64];
             SysRng.try_fill_bytes(&mut password_salt)?;
 
-            if let Ok(password_hash) = hash_password(
+            let password_hash = hash_password(
                 state.clone(),
                 json.password_hash.try_into().unwrap_or([0; 64]),
                 password_salt,
             )
             .await
-            {
-                let mut token = [0; 64];
-                SysRng.try_fill_bytes(&mut token)?;
+            .map_err(|_| ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-                let id = Uuid::new_v4();
+            let mut token = [0; 64];
+            SysRng.try_fill_bytes(&mut token)?;
 
-                send_email(
-                    &json.email,
-                    json.username.clone(),
-                    EmailType::EmailVerify(token, id),
-                )
+            let id = Uuid::new_v4();
+
+            send_email(
+                &json.email,
+                json.username.clone(),
+                EmailType::EmailVerify(token, id),
+            )
+            .await?;
+
+            // delete any previous sign up attempts
+            diesel::delete(unverified_users::table)
+                .filter(unverified_users::username.eq(&json.username))
+                .or_filter(unverified_users::email.eq(&json.email))
+                .execute(&mut conn)
                 .await?;
 
-                // delete any previous sign up attempts
-                diesel::delete(unverified_users::table)
-                    .filter(unverified_users::username.eq(&json.username))
-                    .or_filter(unverified_users::email.eq(&json.email))
-                    .execute(&mut conn)
-                    .await?;
+            let new_user: UnverifiedUser = UnverifiedUser {
+                id,
+                username: json.username,
+                password: password_hash,
+                salt: Vec::from(password_salt),
+                email: json.email,
+                token: Vec::from(token),
+                expires: SystemTime::now() + Duration::from_mins(15),
+            };
 
-                let new_user: UnverifiedUser = UnverifiedUser {
-                    id,
-                    username: json.username,
-                    password: password_hash,
-                    salt: Vec::from(password_salt),
-                    email: json.email,
-                    token: Vec::from(token),
-                    expires: SystemTime::now() + Duration::from_mins(15),
-                };
-
-                insert_into(unverified_users::table)
-                    .values::<UnverifiedUser>(new_user)
-                    .execute(&mut conn)
-                    .await?;
-                Ok(())
-            } else {
-                // most likely cause is that we didnt have a block available
-                info!(
-                    "failed to hash password, probably because we had no available memory blocks"
-                );
-                Err(ApiError::WithCode(http::StatusCode::SERVICE_UNAVAILABLE))
-            }
+            insert_into(unverified_users::table)
+                .values::<UnverifiedUser>(new_user)
+                .execute(&mut conn)
+                .await?;
+            Ok(())
         }
     })
     .await

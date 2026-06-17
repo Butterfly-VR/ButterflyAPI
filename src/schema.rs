@@ -48,6 +48,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    ip_infos (ip) {
+        ip -> Inet,
+        accounts_created -> Int2,
+        account_creation_count_reset -> Timestamp,
+        login_attempts -> Int2,
+        login_attempts_reset -> Timestamp,
+    }
+}
+
+diesel::table! {
     licenses (id) {
         id -> Uuid,
         text -> Text,
@@ -194,6 +204,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     chat_session_messages,
     instances,
     ip_addresses,
+    ip_infos,
     licenses,
     moderations,
     notifications,
