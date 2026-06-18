@@ -6,8 +6,9 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Router, http, routing::get};
 use bb8::Pool;
-use diesel_async::AsyncPgConnection;
+use diesel::QueryDsl;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use dotenvy::dotenv;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -195,7 +196,14 @@ async fn main() {
                 }
                 // this route is used as a health check
                 // so we should check the database connection and clients
-                let _ = black_box(health_check_state.pool.get().await.unwrap());
+                let _ = black_box(
+                    schema::users::table
+                        .select(schema::users::id)
+                        .limit(1)
+                        .execute(&mut health_check_state.pool.get().await.unwrap())
+                        .await
+                        .unwrap(),
+                );
                 let _ = black_box(
                     health_check_state
                         .s3_client
