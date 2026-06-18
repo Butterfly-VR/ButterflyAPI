@@ -44,6 +44,7 @@ const COFFEE_ORIGIN: &str = "/api/v0/coffee";
 const HEALTH_CHECK_ORIGIN: &str = "/api/v0/health";
 // should be equal to the size of the emptydir
 const CACHE_SIZE_KB: u64 = 1024 * 1024 * 10;
+const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(15);
 
 // argon2 needs to allocate a lot of memory for hashing,
 // since allocating at runtime is slow and could cause ooms
@@ -101,6 +102,7 @@ struct AppState {
     user_rate_limits: RwLock<HashMap<Uuid, RateLimitInfo>>,
     object_cache: moka::future::Cache<Uuid, CacheEntry>,
     image_cache: moka::future::Cache<Uuid, CacheEntry>,
+    last_health_check: SystemTime,
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +175,7 @@ async fn main() {
             // max of 1000 entries
             .weigher(|_, v: &CacheEntry| v.size_kb.min((CACHE_SIZE_KB / 1000) as u32))
             .build(),
+        last_health_check: SystemTime::now(),
     });
 
     let health_check_state = app_state.clone();
@@ -182,6 +185,14 @@ async fn main() {
         .route(
             HEALTH_CHECK_ORIGIN,
             get(async move || {
+                // endpoint is public so we need to avoid spamming health checks
+                if SystemTime::now()
+                    .duration_since(health_check_state.last_health_check)
+                    .unwrap_or_default()
+                    > HEALTH_CHECK_INTERVAL
+                {
+                    return http::StatusCode::OK;
+                }
                 // this route is used as a health check
                 // so we should check the database connection and clients
                 let _ = black_box(health_check_state.pool.get().await.unwrap());
