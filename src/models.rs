@@ -153,6 +153,7 @@ pub struct Object {
 pub struct User {
     pub id: Uuid,
     pub username: String,
+    #[serde(skip_serializing)]
     pub email: String,
     #[serde(skip_serializing)]
     pub password: Vec<u8>,
