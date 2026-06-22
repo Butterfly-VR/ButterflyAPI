@@ -6,6 +6,7 @@ use crate::models::PublicUserInfo;
 use crate::schema::objects;
 use crate::schema::tags;
 use crate::schema::users;
+use axum::Extension;
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -103,6 +104,7 @@ fn parse_filters(filters_map: HashMap<&str, &str>) -> Vec<Filter> {
 pub async fn search(
     State(app_state): State<Arc<AppState>>,
     Path(query): Path<String>,
+    Extension(user): Extension<Uuid>,
 ) -> Result<Json<SearchResult>, ApiError> {
     // todo: replace unwraps with error handling
     let (term, filters) = query
@@ -133,13 +135,15 @@ pub async fn search(
                 break;
             }
             Filter::Is(FilterObjectTypes::World) => {
-                search_result.worlds =
-                    Some(search_objects(FilterObjectTypes::World, &filters, term, &mut conn).await);
+                search_result.worlds = Some(
+                    search_objects(FilterObjectTypes::World, &filters, term, &mut conn, user).await,
+                );
                 break;
             }
             Filter::Is(FilterObjectTypes::Avatar) => {
                 search_result.avatars = Some(
-                    search_objects(FilterObjectTypes::Avatar, &filters, term, &mut conn).await,
+                    search_objects(FilterObjectTypes::Avatar, &filters, term, &mut conn, user)
+                        .await,
                 );
                 break;
             }
@@ -155,18 +159,26 @@ pub async fn search_objects(
     filters: &[Filter],
     search_term: &str,
     conn: &mut AsyncPgConnection,
+    user: Uuid,
 ) -> Vec<ShortObject> {
     let mut query = objects::table
         .select((objects::id, objects::name))
         .distinct_on(objects::id)
-        .filter(objects::name.like(format!("%{search_term}%")))
-        .or_filter(objects::description.like(format!("%{search_term}%")))
         .left_join(tags::table)
-        .or_filter(tags::tag.eq(search_term))
         .inner_join(users::table.on(users::id.eq(objects::creator)))
-        .or_filter(users::username.like(format!("%{search_term}%")))
+        .filter(
+            objects::name
+                .like(format!("%{search_term}%"))
+                .or(objects::description.like(format!("%{search_term}%")))
+                .or(tags::tag.eq(search_term))
+                .or(users::username.like(format!("%{search_term}%"))),
+        )
         .filter(objects::object_type.eq(object_type as i16))
-        .filter(objects::publicity.eq(ObjectPublicity::Public as i16))
+        .filter(
+            objects::publicity
+                .eq(ObjectPublicity::Public as i16)
+                .or(users::id.eq(user)),
+        )
         .limit(500)
         .into_boxed();
 

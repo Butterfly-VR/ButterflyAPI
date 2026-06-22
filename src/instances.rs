@@ -4,7 +4,6 @@ use crate::auth;
 use crate::gameserver_handler::allocate_gameserver;
 use crate::models::Instance;
 use crate::models::InstancePublicity;
-use crate::models::ObjectPublicity;
 use crate::schema::instances;
 use crate::schema::objects;
 use crate::schema::users;
@@ -143,6 +142,7 @@ impl From<Vec<InstanceInfo>> for InstanceSearchResult {
 
 pub async fn search_instances(
     State(state): State<Arc<AppState>>,
+    Extension(user): Extension<Uuid>,
     Json(search): Json<InstanceSearch>,
 ) -> Result<Json<InstanceSearchResult>, ApiError> {
     let mut conn = state.pool.get().await?;
@@ -151,14 +151,19 @@ pub async fn search_instances(
         {
             let mut query = instances::table
                 .left_join(users::table)
-                .left_join(objects::table)
+                .inner_join(objects::table)
                 .group_by(instances::id)
                 .select((Instance::as_select(), count(users::id.nullable())))
                 .filter(instances::world.eq(search.world))
-                .filter(objects::publicity.eq(ObjectPublicity::Public as i16))
-                .filter(instances::publicity.eq(InstancePublicity::Public as i16))
+                .filter(
+                    instances::publicity
+                        .eq(InstancePublicity::Public as i16)
+                        .or(users::id
+                            .eq(user)
+                            .and(users::instance.eq(instances::id.nullable()))),
+                )
                 .limit(100)
-                .into_boxed();
+                .into_boxed::<diesel::pg::Pg>();
 
             if let Some(is_gameserver) = search.is_gameserver {
                 query = query.filter(instances::is_gameserver.eq(is_gameserver));
