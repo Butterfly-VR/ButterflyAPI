@@ -24,12 +24,14 @@ use diesel::dsl::sql;
 use diesel::insert_into;
 use diesel::prelude::*;
 use diesel::sql_types::BigInt;
+use diesel::update;
 use diesel_async::AsyncConnection;
 use diesel_async::RunQueryDsl;
 use futures_util::TryStreamExt;
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 use tokio::io::AsyncRead;
@@ -40,6 +42,7 @@ use uuid::Uuid;
 const OBJECT_INFO_ROUTE: &str = "/{object_type}/{uuid}";
 const OBJECT_DOWNLOAD_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/epck");
 const OBJECT_IMAGE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/image");
+const OBJECT_DELETE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/delete");
 const MAX_TOTAL_UPLOADED_KB: usize = 1024 * 100;
 const MAX_OBJECTS_PER_USER: i64 = 100;
 
@@ -291,6 +294,7 @@ pub async fn get_object_info(
         .select(Object::as_select())
         .filter(objects::id.eq(&object_id))
         .filter(objects::object_type.eq(object_type as i16))
+        .filter(objects::delete_at.is_null())
         .first::<Object>(&mut conn)
         .await
         .optional()?
@@ -826,6 +830,54 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     Ok(())
 }
 
+pub async fn delete_object(
+    state: State<Arc<AppState>>,
+    Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
+    Extension(user_id): Extension<Uuid>,
+) -> Result<(), ApiError> {
+    const DELETION_GRACE_PERIOD: Duration = Duration::from_hours(24 * 7);
+
+    let mut conn = state.pool.get().await?;
+
+    if let Some(object) = objects::table
+        .select(Object::as_select())
+        .filter(objects::id.eq(&object_id))
+        .filter(objects::object_type.eq(object_type as i16))
+        .filter(objects::delete_at.is_null())
+        .first(&mut conn)
+        .await
+        .optional()?
+    {
+        if object.creator == user_id {
+            update(objects::table)
+                .filter(objects::id.eq(&object_id))
+                .set((
+                    objects::delete_at.eq(SystemTime::now() + DELETION_GRACE_PERIOD),
+                    objects::updated_at.eq(SystemTime::now()),
+                ))
+                .execute(&mut conn)
+                .await?;
+            Ok(())
+        } else {
+            return Err(ApiError::WithResponse(
+                StatusCode::FORBIDDEN,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::InsufficientPermissions,
+                    error_message: Some("You are not authorized to delete this object".to_string()),
+                }),
+            ));
+        }
+    } else {
+        return Err(ApiError::WithResponse(
+            StatusCode::NOT_FOUND,
+            Json(ErrorInfo {
+                error_code: ErrorCode::DosentExist,
+                error_message: Some("This object does not exist".to_string()),
+            }),
+        ));
+    }
+}
+
 pub fn objects_router(app_state: Arc<AppState>) -> Router {
     Router::new()
         .route(
@@ -840,6 +892,7 @@ pub fn objects_router(app_state: Arc<AppState>) -> Router {
             OBJECT_IMAGE_ROUTE,
             get(get_object_image).post(change_object_image),
         )
+        .route(OBJECT_DELETE_ROUTE, get(delete_object))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             check_auth,

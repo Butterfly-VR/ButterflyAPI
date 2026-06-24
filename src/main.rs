@@ -16,6 +16,7 @@ use std::env::args;
 use std::error::Error;
 use std::fs;
 use std::hint::black_box;
+use std::net::SocketAddr;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
 use std::time::{Duration, Instant, SystemTime};
@@ -38,7 +39,6 @@ pub mod schema;
 mod search;
 mod tokens;
 mod users;
-use std::net::SocketAddr;
 
 const ROUTE_ORIGIN: &str = "/api/v0";
 const COFFEE_ORIGIN: &str = "/api/v0/coffee";

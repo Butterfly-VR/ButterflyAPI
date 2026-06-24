@@ -179,6 +179,7 @@ pub async fn search_objects(
                 .eq(ObjectPublicity::Public as i16)
                 .or(users::id.eq(user)),
         )
+        .filter(objects::delete_at.is_null())
         .limit(500)
         .into_boxed();
 
