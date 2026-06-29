@@ -43,7 +43,7 @@ const OBJECT_INFO_ROUTE: &str = "/{object_type}/{uuid}";
 const OBJECT_DOWNLOAD_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/epck");
 const OBJECT_IMAGE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/image");
 const OBJECT_DELETE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/delete");
-const MAX_TOTAL_UPLOADED_KB: usize = 1024 * 100;
+const MAX_TOTAL_UPLOADED_KB: usize = 1024 * 1024 * 5;
 const MAX_OBJECTS_PER_USER: i64 = 100;
 
 #[derive(Deserialize)]
@@ -140,7 +140,10 @@ pub async fn create_or_update_object(
                     new_object.license = license_number;
                 } else {
                     new_object.license = insert_into(licenses::table)
-                        .values(licenses::text.eq(&json.license))
+                        .values((
+                            licenses::text.eq(&json.license),
+                            licenses::id.eq(Uuid::new_v4()),
+                        ))
                         .returning(licenses::id)
                         .get_result(&mut conn)
                         .await?;
@@ -169,7 +172,7 @@ pub async fn create_or_update_object(
 
                 if objects::table
                     .select(diesel::dsl::count(objects::id))
-                    .left_join(users::table.on(users::id.eq(objects::creator)))
+                    .inner_join(users::table.on(users::id.eq(objects::creator)))
                     .group_by(objects::creator)
                     .filter(users::id.eq(user_id))
                     .first::<i64>(&mut conn)
@@ -278,7 +281,7 @@ pub struct ObjectInfo {
     pub creator: Uuid,
     pub object_type: i16,
     pub publicity: i16,
-    pub license: Uuid,
+    pub license: String,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
     pub tags: Vec<String>,
@@ -290,12 +293,13 @@ pub async fn get_object_info(
 ) -> Result<Json<ObjectInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
 
-    if let Some(object) = objects::table
-        .select(Object::as_select())
+    if let Some((object, license)) = objects::table
+        .inner_join(licenses::table)
+        .select((Object::as_select(), licenses::text))
         .filter(objects::id.eq(&object_id))
         .filter(objects::object_type.eq(object_type as i16))
         .filter(objects::delete_at.is_null())
-        .first::<Object>(&mut conn)
+        .first::<(Object, String)>(&mut conn)
         .await
         .optional()?
     {
@@ -328,7 +332,7 @@ pub async fn get_object_info(
             creator: object.creator,
             object_type: object.object_type,
             publicity: object.publicity,
-            license: object.license,
+            license,
             encryption_iv: object.encryption_iv,
             encryption_key: object.encryption_key,
             tags,

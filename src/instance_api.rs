@@ -3,6 +3,7 @@ use crate::AppState;
 use crate::auth;
 use crate::models::{Object, PublicUserInfo};
 use crate::schema::instances;
+use crate::schema::licenses;
 use crate::schema::objects;
 use crate::schema::tags;
 use crate::schema::users;
@@ -87,14 +88,15 @@ pub async fn get_object(
 ) -> Result<Json<crate::objects::ObjectInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
 
-    let object: Option<Object> = objects::table
-        .select(Object::as_select())
+    let object: Option<(Object, String)> = objects::table
+        .inner_join(licenses::table)
+        .select((Object::as_select(), licenses::text))
         .filter(objects::id.eq(object_id))
         .first(&mut conn)
         .await
         .optional()?;
 
-    let Some(object) = object else {
+    let Some((object, license)) = object else {
         return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
     };
 
@@ -127,7 +129,7 @@ pub async fn get_object(
         creator: object.creator,
         object_type: object.object_type,
         publicity: object.publicity,
-        license: object.license,
+        license,
         encryption_iv: object.encryption_iv,
         encryption_key: object.encryption_key,
         tags,

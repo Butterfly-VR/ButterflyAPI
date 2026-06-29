@@ -54,7 +54,7 @@ pub struct SignInResponse {
     renewable: bool,
 }
 
-// extremely unlikely that we will ever need a token to expire before the epoch
+// we cant represent a time earlier than the epoch so this never panics
 #[allow(clippy::fallible_impl_from)]
 impl From<Token> for SignInResponse {
     fn from(value: Token) -> Self {
@@ -63,7 +63,7 @@ impl From<Token> for SignInResponse {
             token_expires: value
                 .expires
                 .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap() // pretty sure we cant even represent < epoch but should be harmless regardless
+                .unwrap()
                 .as_secs(),
             renewable: value.renewable,
         }
