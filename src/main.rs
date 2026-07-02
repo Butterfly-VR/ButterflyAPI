@@ -38,6 +38,7 @@ mod objects;
 pub mod schema;
 mod search;
 mod tokens;
+mod user;
 mod users;
 
 const ROUTE_ORIGIN: &str = "/api/v0";
@@ -236,6 +237,7 @@ async fn main() {
             ROUTE_ORIGIN,
             instance_api::instance_api_router(app_state.clone()),
         )
+        .nest(ROUTE_ORIGIN, user::user_api_router(app_state.clone()))
         .layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:80").await.unwrap();
