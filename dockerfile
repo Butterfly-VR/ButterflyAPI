@@ -21,6 +21,8 @@ COPY src ./src
 COPY migrations ./migrations
 COPY diesel.toml ./
 
+RUN touch src/main.rs
+
 RUN cargo build --release
 
 FROM debian:trixie-slim AS runtime
