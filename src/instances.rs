@@ -253,7 +253,9 @@ pub async fn join_instance(
                 .await
                 .optional()?
             else {
-                return Err(ApiError::WithCode(StatusCode::NOT_FOUND));
+                return Ok::<Result<InstanceJoinInfo, ApiError>, ApiError>(Err(
+                    ApiError::WithCode(StatusCode::NOT_FOUND),
+                ));
             };
 
             // todo: check for instance privacy, blocks, etc
@@ -269,14 +271,14 @@ pub async fn join_instance(
                 .execute(&mut conn)
                 .await?;
 
-            Ok(InstanceJoinInfo {
+            Ok(Ok(InstanceJoinInfo {
                 ip: instance.ip.to_string(),
                 port: instance.port as u16,
                 identifier: identifier.to_vec(),
-            })
+            }))
         }
     })
-    .await
+    .await?
     .map(Json)
 }
 

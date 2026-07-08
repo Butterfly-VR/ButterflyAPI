@@ -91,7 +91,7 @@ pub async fn sign_in(
             StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
                 error_code: ErrorCode::InvalidRequest,
-                error_message: Some(String::from("Invalid email. This shouldnt happen")),
+                error_message: Some(String::from("Invalid email")),
             }),
         ));
     }
@@ -104,7 +104,7 @@ pub async fn sign_in(
         let ip = headers
             .get("x-forwarded-for")
             .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?;
-        let ip = IpNet::new(IpAddr::from_str(ip.to_str()?)?, 24)?;
+        let ip = IpNet::new(IpAddr::from_str(ip.to_str()?)?, 32)?;
 
         if let Some(ip_info) = ip_infos::table.select((ip_infos::login_attempts, ip_infos::login_attempts_reset)).filter(ip_infos::ip.eq(ip))
             .first::<(i16, SystemTime)>(&mut conn)
@@ -170,7 +170,7 @@ pub async fn sign_in(
                     .execute(&mut conn)
                     .await?;
 
-                return Ok(Json(token_value.into()));
+                return Ok(Ok(Json(token_value.into())));
             }
             let elapsed = Instant::now().duration_since(t1);
             trace!(
@@ -192,15 +192,15 @@ pub async fn sign_in(
 
         let elapsed = Instant::now().duration_since(t1);
         sleep(TIMING_ATTACK_PROTECTION.saturating_sub(elapsed)).await;
-        Err(ApiError::WithResponse(
+        Ok(Err(ApiError::WithResponse(
             StatusCode::BAD_REQUEST,
             Json(ErrorInfo {
                 error_code: ErrorCode::DosentExist,
                 error_message: Some(String::from("Invalid email or password.")),
             }),
-        ))
+        )))
     })
-    .await
+    .await?
 }
 
 pub async fn renew(

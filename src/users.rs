@@ -83,7 +83,7 @@ pub async fn sign_up(
             let ip = headers
                 .get("x-forwarded-for")
                 .ok_or(ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?;
-            let ip = IpNet::new(IpAddr::from_str(ip.to_str()?)?, 24)?;
+            let ip = IpNet::new(IpAddr::from_str(ip.to_str()?)?, 32)?;
 
             if let Some(ip_info) = update(ip_infos::table.filter(ip_infos::ip.eq(ip)))
                 .set(ip_infos::accounts_created.eq(ip_infos::accounts_created + 1))
@@ -105,7 +105,9 @@ pub async fn sign_up(
                         .execute(&mut conn)
                         .await?;
                 } else if ip_info.0 >= ACCOUNT_CREATION_LIMIT {
-                    return Err(ApiError::WithCode(StatusCode::TOO_MANY_REQUESTS));
+                    return Ok::<Result<(), ApiError>, ApiError>(Err(ApiError::WithCode(
+                        StatusCode::TOO_MANY_REQUESTS,
+                    )));
                 }
             } else {
                 let entry = IpInfo {
@@ -130,13 +132,13 @@ pub async fn sign_up(
                 .await?
                 != 0
             {
-                return Err(ApiError::WithResponse(
+                return Ok(Err(ApiError::WithResponse(
                     StatusCode::BAD_REQUEST,
                     Json(ErrorInfo {
                         error_code: ErrorCode::AlreadyExists,
                         error_message: Some(String::from("Username or email already in use.")),
                     }),
-                ));
+                )));
             }
 
             let mut password_salt = [0; 64];
@@ -183,10 +185,10 @@ pub async fn sign_up(
                 .values::<UnverifiedUser>(new_user)
                 .execute(&mut conn)
                 .await?;
-            Ok(())
+            Ok(Ok(()))
         }
     })
-    .await
+    .await?
 }
 
 pub enum GetUserResult {
