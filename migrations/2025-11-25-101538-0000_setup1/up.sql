@@ -21,7 +21,6 @@ CREATE TABLE "users" (
 );
 
 CREATE INDEX "users_username_trgm_index" ON "users" USING GIN ("username" gin_trgm_ops);
-CREATE INDEX "users_email_hash_index" ON "users" USING HASH("email");
 CREATE INDEX "users_instance_index" ON "users" ("instance");
 CREATE INDEX "users_identifier_index" ON "users" ("identifier");
 

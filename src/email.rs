@@ -6,8 +6,10 @@ use lettre::{
 };
 use std::env;
 use tokio::task::spawn_blocking;
+use tracing::debug;
 use uuid::Uuid;
 
+#[derive(Debug)]
 pub enum EmailType {
     EmailVerify([u8; 64], Uuid),
 }
@@ -52,9 +54,14 @@ pub async fn send_email(
     username: String,
     email_type: EmailType,
 ) -> Result<(), ApiError> {
+    debug!(
+        "sending email to {:?} for user {:?} with type {:?}",
+        email, username, email_type
+    );
+
     let email_first_part = MessageBuilder::new()
         .to(Mailbox {
-            name: None, //Some(username.clone()),
+            name: Some(username.clone()),
             email: email.parse()?,
         })
         .from(Mailbox {

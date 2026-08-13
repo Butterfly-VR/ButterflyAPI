@@ -13,6 +13,7 @@ use schema::tokens::dsl::{expires, token, tokens, user};
 use std::sync::atomic::AtomicU64;
 use std::time::Instant;
 use std::{sync::Arc, time::SystemTime};
+use tracing::{debug, trace};
 use uuid::Uuid;
 
 const RATE_LIMIT_WINDOW: std::time::Duration = std::time::Duration::from_hours(1);
@@ -53,6 +54,7 @@ pub async fn check_auth(
                 if AtomicU64::load(&info.total_requests, std::sync::atomic::Ordering::Relaxed)
                     >= RATE_LIMIT_THRESHOLD
                 {
+                    debug!("rate limit exceeded for user {}", user_id);
                     return Err(ApiError::WithCode(StatusCode::TOO_MANY_REQUESTS));
                 }
 
@@ -72,6 +74,11 @@ pub async fn check_auth(
         }
 
         req.extensions_mut().insert(user_id);
+        trace!(
+            "authenticated user {:?} for access to {:?}",
+            user_id,
+            req.uri()
+        );
         return Ok(next.run(req).await);
     }
     if let Ok(Some(instance_id)) = instances::table
@@ -82,8 +89,14 @@ pub async fn check_auth(
         .optional()
     {
         req.extensions_mut().insert(instance_id);
+        trace!(
+            "authenticated instance {:?} for access to {:?}",
+            instance_id,
+            req.uri()
+        );
         return Ok(next.run(req).await);
     }
+    debug!("unauthorized request to {:?}", req.uri());
     Err(ApiError::WithCode(StatusCode::UNAUTHORIZED))
 }
 
@@ -99,15 +112,24 @@ pub async fn check_instance_auth(
         .get("token")
         .and_then(|x| hex::decode(x).ok())
         .unwrap_or_default();
-    if let Ok(Some(user_id)) = instances::table
+    if let Ok(Some(instance_id)) = instances::table
         .select(instances::id)
         .filter(instances::server_token.eq(header_token))
         .first::<Uuid>(&mut conn)
         .await
         .optional()
     {
-        req.extensions_mut().insert(user_id);
+        req.extensions_mut().insert(instance_id);
+        trace!(
+            "authenticated instance {:?} for access to {:?}",
+            instance_id,
+            req.uri()
+        );
         return Ok(next.run(req).await);
     }
+    debug!(
+        "unauthorized request to instance api endpoint {:?}",
+        req.uri()
+    );
     Err(ApiError::WithCode(StatusCode::UNAUTHORIZED))
 }
