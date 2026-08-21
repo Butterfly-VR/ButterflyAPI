@@ -137,7 +137,7 @@ pub async fn sign_in(
                 .await?;
         }
 
-        // start of 'critial' section (see top of function)
+        // start of 'critical' section (see top of function)
         if let Ok(u) = users
             .select(User::as_select())
             .filter(email.eq(&json.email))
@@ -152,7 +152,7 @@ pub async fn sign_in(
             .await;
 
             if password_hash.unwrap_or_default() == u.password {
-                // end of 'critial' section (see top of function)
+                // end of 'critical' section (see top of function)
                 // if this code block isnt reached, critical section lasts until the end of the function
                 let mut t = vec![0; 64];
 

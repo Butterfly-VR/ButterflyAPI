@@ -35,7 +35,7 @@ pub async fn get_user(
 
     // homeworld and avatar need to be nullable to avoid circular dependacies
     // but we want to always return something valid
-    // these values should corrospond to objects uploaded by the ButterflyDev account
+    // these values should correspond to objects uploaded by the ButterflyDev account
     user.homeworld = Some(user.homeworld.unwrap_or(Uuid::nil()));
     user.avatar = Some(user.avatar.unwrap_or(Uuid::from_u64_pair(0, 1)));
     return Ok(Json(user));
@@ -65,7 +65,7 @@ pub async fn get_homeworld(
 
     // homeworld and avatar need to be nullable to avoid circular dependacies
     // but we want to always return something valid
-    // these values should corrospond to objects uploaded by the ButterflyDev account
+    // these values should correspond to objects uploaded by the ButterflyDev account
     let homeworld = homeworld.unwrap_or(Uuid::nil());
     return Ok(Json(Homeworld { uuid: homeworld }));
 }
@@ -84,7 +84,7 @@ pub async fn get_avatar(
 
     // homeworld and avatar need to be nullable to avoid circular dependacies
     // but we want to always return something valid
-    // these values should corrospond to objects uploaded by the ButterflyDev account
+    // these values should correspond to objects uploaded by the ButterflyDev account
     let avatar = avatar.unwrap_or(Uuid::from_u64_pair(0, 1));
     return Ok(Json(Avatar { uuid: avatar }));
 }

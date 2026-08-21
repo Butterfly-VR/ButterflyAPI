@@ -41,7 +41,7 @@ pub async fn check_auth(
     {
         let rate_limit_info = state.user_rate_limits.read().await;
 
-        // only aquire write lock if we need to insert
+        // only acquire write lock if we need to insert
         if let Some(info) = rate_limit_info.get(&user_id) {
             if info.next_reset < Instant::now() {
                 drop(rate_limit_info);

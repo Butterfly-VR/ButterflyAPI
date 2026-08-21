@@ -222,7 +222,7 @@ pub async fn get_user(
         if requesting_user == user.id {
             // homeworld and avatar need to be nullable to avoid circular dependacies
             // but we want to always return something valid
-            // these values should corrospond to objects uploaded by the ButterflyDev account
+            // these values should correspond to objects uploaded by the ButterflyDev account
             user.homeworld = Some(user.homeworld.unwrap_or(Uuid::nil()));
             user.avatar = Some(user.avatar.unwrap_or(Uuid::from_u64_pair(0, 1)));
             return Ok(GetUserResult::User(Json(user)));

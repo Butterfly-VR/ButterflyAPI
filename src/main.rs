@@ -50,7 +50,7 @@ const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(15);
 
 // argon2 needs to allocate a lot of memory for hashing,
 // since allocating at runtime is slow and could cause ooms
-// we allocate several 'blocks' upfront guarded by mutexs
+// we allocate several 'blocks' upfront guarded by mutexes
 // and lock one to use whenever we need to hash
 // this shouldnt be more than the number of available threads,
 // since it wastes memory with no benefit
