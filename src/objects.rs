@@ -41,6 +41,7 @@ use uuid::Uuid;
 
 const OBJECT_INFO_ROUTE: &str = "/{object_type}/{uuid}";
 const OBJECT_DOWNLOAD_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/epck");
+const OBJECT_SERVER_VARIANT_DOWNLOAD_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/server");
 const OBJECT_IMAGE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/image");
 const OBJECT_DELETE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/delete");
 const MAX_TOTAL_UPLOADED_KB: usize = 1024 * 1024 * 5;
@@ -501,6 +502,128 @@ pub async fn change_object_file(
     Ok(())
 }
 
+pub async fn get_object_server_variant_file(
+    State(state): State<Arc<AppState>>,
+    Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
+) -> Result<Body, ApiError> {
+    let enum_str: &'static str = object_type.into();
+    let enum_str = enum_str.to_owned() + "-server";
+
+    if let Some(cache_entry) = state.server_variant_cache.get(&object_id).await {
+        let mut conn = state.pool.get().await?;
+
+        if objects::table
+            .select(objects::updated_at)
+            .find(object_id)
+            .first::<SystemTime>(&mut conn)
+            .await
+            .map(|updated_at| updated_at < cache_entry.cached_at)?
+        {
+            return Ok(Body::from_stream(file_cache::CacheFileStream::new(
+                cache_entry.file,
+            )));
+        }
+        state.server_variant_cache.invalidate(&object_id).await;
+    }
+    {
+        let state = state.clone();
+        let object_id = object_id.clone();
+        let enum_str = enum_str.clone();
+        let _ = spawn(async move {
+            let _ = file_cache::cache_object(
+                state.clone(),
+                &state.server_variant_cache,
+                object_id,
+                &enum_str,
+            )
+            .await;
+        });
+    }
+
+    let object = state
+        .s3_client
+        .get_object()
+        .bucket(enum_str)
+        .key(object_id.to_string())
+        .send()
+        .await?;
+    let x = object.body.into_async_read();
+    Ok(Body::from_stream(tokio_util::io::ReaderStream::new(x)))
+}
+
+pub async fn change_object_server_variant_file(
+    state: State<Arc<AppState>>,
+    Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
+    Extension(user_id): Extension<Uuid>,
+    body: Body,
+) -> Result<(), ApiError> {
+    let mut conn = state.pool.get().await?;
+
+    if let Some(object) = objects::table
+        .select(Object::as_select())
+        .filter(objects::id.eq(&object_id))
+        .filter(objects::object_type.eq(object_type as i16))
+        .first(&mut conn)
+        .await
+        .optional()?
+    {
+        let object: Object = object;
+
+        if object.creator != user_id {
+            return Err(ApiError::WithResponse(
+                StatusCode::FORBIDDEN,
+                Json(ErrorInfo {
+                    error_code: ErrorCode::InsufficientPermissions,
+                    error_message: Some(
+                        "You do not have permission to edit this object.".to_owned(),
+                    ),
+                }),
+            ));
+        }
+
+        state.server_variant_cache.invalidate(&object_id).await;
+
+        let stream = body.into_data_stream();
+
+        let enum_str: &'static str = match object_type {
+            ObjectType::World => "worlds",
+            ObjectType::Avatar => "avatars",
+        };
+        let enum_str = enum_str.to_owned() + "-server";
+
+        diesel::update(objects::table)
+            .filter(objects::id.eq(&object_id))
+            .filter(objects::object_type.eq(object_type as i16))
+            .set((
+                objects::verified.eq(false),
+                objects::updated_at.eq(SystemTime::now()),
+            ))
+            .execute(&mut conn)
+            .await?;
+
+        upload_object_stream(
+            &state.s3_client,
+            &enum_str,
+            &object_id.to_string(),
+            &mut tokio_util::io::StreamReader::new(stream.map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::NotFound, "no error handling here")
+            })),
+            object.object_size as usize / 1024,
+        )
+        .await?;
+    } else {
+        return Err(ApiError::WithResponse(
+            StatusCode::NOT_FOUND,
+            Json(ErrorInfo {
+                error_code: ErrorCode::DosentExist,
+                error_message: None,
+            }),
+        ));
+    }
+
+    Ok(())
+}
+
 pub async fn get_object_image(
     State(state): State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
@@ -891,6 +1014,10 @@ pub fn objects_router(app_state: Arc<AppState>) -> Router {
         .route(
             OBJECT_DOWNLOAD_ROUTE,
             get(get_object_file).post(change_object_file),
+        )
+        .route(
+            OBJECT_SERVER_VARIANT_DOWNLOAD_ROUTE,
+            get(get_object_server_variant_file).post(change_object_server_variant_file),
         )
         .route(
             OBJECT_IMAGE_ROUTE,

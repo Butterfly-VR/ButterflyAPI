@@ -44,16 +44,19 @@ mod users;
 const ROUTE_ORIGIN: &str = "/api/v0";
 const COFFEE_ORIGIN: &str = "/api/v0/coffee";
 const HEALTH_CHECK_ORIGIN: &str = "/api/v0/health";
-// should be equal to the size of the emptydir
-const CACHE_SIZE_KB: u64 = 1024 * 1024 * 10;
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(15);
 
+// combined should be < deployment cache volume size
+const OBJECT_CACHE_SIZE_KB: u64 = 1024 * 1024 * 8;
+const IMAGE_CACHE_SIZE_KB: u64 = 1024 * 1024;
+const SERVER_VARIANT_CACHE_SIZE_KB: u64 = 1024 * 256;
+
 // argon2 needs to allocate a lot of memory for hashing,
-// since allocating at runtime is slow and could cause ooms
+// since allocating at runtime is slow
 // we allocate several 'blocks' upfront guarded by mutexes
 // and lock one to use whenever we need to hash
 // this shouldnt be more than the number of available threads,
-// since it wastes memory with no benefit
+// since it wastes memory
 const HASHER_MEMORY_BLOCKS: usize = 2;
 
 #[derive(Serialize)]
@@ -104,6 +107,7 @@ struct AppState {
     user_rate_limits: RwLock<HashMap<Uuid, RateLimitInfo>>,
     object_cache: moka::future::Cache<Uuid, CacheEntry>,
     image_cache: moka::future::Cache<Uuid, CacheEntry>,
+    server_variant_cache: moka::future::Cache<Uuid, CacheEntry>,
     last_health_check: SystemTime,
 }
 
@@ -166,16 +170,24 @@ async fn main() {
         }),
         user_rate_limits: RwLock::new(HashMap::with_capacity(1024)),
         object_cache: moka::future::Cache::builder()
-            .max_capacity(CACHE_SIZE_KB)
+            .max_capacity(OBJECT_CACHE_SIZE_KB)
             .initial_capacity(1000)
             // max of 1000 entries
-            .weigher(|_, v: &CacheEntry| v.size_kb.min((CACHE_SIZE_KB / 1000) as u32))
+            .weigher(|_, v: &CacheEntry| v.size_kb.min((OBJECT_CACHE_SIZE_KB / 1000) as u32))
             .build(),
         image_cache: moka::future::Cache::builder()
-            .max_capacity(CACHE_SIZE_KB)
+            .max_capacity(IMAGE_CACHE_SIZE_KB)
             .initial_capacity(1000)
             // max of 1000 entries
-            .weigher(|_, v: &CacheEntry| v.size_kb.min((CACHE_SIZE_KB / 1000) as u32))
+            .weigher(|_, v: &CacheEntry| v.size_kb.min((IMAGE_CACHE_SIZE_KB / 1000) as u32))
+            .build(),
+        server_variant_cache: moka::future::Cache::builder()
+            .max_capacity(SERVER_VARIANT_CACHE_SIZE_KB)
+            .initial_capacity(1000)
+            // max of 1000 entries
+            .weigher(|_, v: &CacheEntry| {
+                v.size_kb.min((SERVER_VARIANT_CACHE_SIZE_KB / 1000) as u32)
+            })
             .build(),
         last_health_check: SystemTime::now(),
     });
