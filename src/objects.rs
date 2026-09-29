@@ -177,7 +177,9 @@ pub async fn create_or_update_object(
                     .group_by(objects::creator)
                     .filter(users::id.eq(user_id))
                     .first::<i64>(&mut conn)
-                    .await?
+                    .await
+                    .optional()?
+                    .unwrap_or(0)
                     > MAX_OBJECTS_PER_USER
                 {
                     return Err(ApiError::WithResponse(
