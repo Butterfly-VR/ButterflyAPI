@@ -809,12 +809,16 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     first_chunk.truncate(total_read_size);
 
     if first_chunk.len() < MAX_PUT_SIZE {
-        if first_chunk.len() > (available_space_kb * 1024) {
+        if first_chunk.len() / 1024 > available_space_kb {
             return Err(ApiError::WithResponse(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorInfo {
                     error_code: ErrorCode::InsufficientSpace,
-                    error_message: Some("Not enough space".to_string()),
+                    error_message: Some(format!(
+                        "Not enough space: {} kb available, {} kb required",
+                        available_space_kb,
+                        first_chunk.len() / 1024
+                    )),
                 }),
             ));
         }
@@ -885,7 +889,7 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
         chunk.resize(total_read_size, 0);
         object_size += total_read_size;
 
-        if object_size > available_space_kb * 1024 {
+        if object_size / 1024 > available_space_kb {
             client
                 .abort_multipart_upload()
                 .bucket(bucket)
@@ -897,7 +901,11 @@ async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorInfo {
                     error_code: ErrorCode::InsufficientSpace,
-                    error_message: Some("Not enough space".to_string()),
+                    error_message: Some(format!(
+                        "Not enough space: {} kb available, {} kb required",
+                        available_space_kb,
+                        object_size / 1024
+                    )),
                 }),
             ));
         }
