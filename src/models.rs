@@ -35,12 +35,12 @@ impl TryFrom<i16> for ObjectType {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PermissionsLevel {
     Default = 0,
     Moderator = 1,
     Admin = 2,
-    Owner = 3,
-    Internal = 4,
+    Internal = 3,
 }
 
 impl From<PermissionsLevel> for i16 {
@@ -55,8 +55,7 @@ impl From<i16> for PermissionsLevel {
             0 => PermissionsLevel::Default,
             1 => PermissionsLevel::Moderator,
             2 => PermissionsLevel::Admin,
-            3 => PermissionsLevel::Owner,
-            4 => PermissionsLevel::Internal,
+            3 => PermissionsLevel::Internal,
             _ => PermissionsLevel::Default,
         }
     }

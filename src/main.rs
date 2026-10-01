@@ -34,7 +34,10 @@ mod instances;
 mod jobs;
 mod kube_resources;
 pub mod models;
+mod moderation;
+mod object_download_token;
 mod objects;
+mod permission_checker;
 pub mod schema;
 mod search;
 mod tokens;
@@ -250,6 +253,14 @@ async fn main() {
             instance_api::instance_api_router(app_state.clone()),
         )
         .nest(ROUTE_ORIGIN, user::user_api_router(app_state.clone()))
+        .nest(
+            ROUTE_ORIGIN,
+            moderation::moderation_router(app_state.clone()),
+        )
+        .nest(
+            ROUTE_ORIGIN,
+            object_download_token::object_download_token_router(app_state.clone()),
+        )
         .layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:80").await.unwrap();
