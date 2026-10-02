@@ -3,9 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;
 
-use crate::schema::{
-    instances, ip_infos, licenses, objects, tags, tokens, unverified_users, users,
-};
+use crate::schema::*;
 
 // diesel dosent like enums so we dont define these on db
 #[derive(Deserialize, Clone, Copy)]
@@ -40,7 +38,6 @@ pub enum PermissionsLevel {
     Default = 0,
     Moderator = 1,
     Admin = 2,
-    Internal = 3,
 }
 
 impl From<PermissionsLevel> for i16 {
@@ -55,7 +52,6 @@ impl From<i16> for PermissionsLevel {
             0 => PermissionsLevel::Default,
             1 => PermissionsLevel::Moderator,
             2 => PermissionsLevel::Admin,
-            3 => PermissionsLevel::Internal,
             _ => PermissionsLevel::Default,
         }
     }
@@ -256,4 +252,12 @@ pub struct IpInfo {
     pub account_creation_count_reset: SystemTime,
     pub login_attempts: i16,
     pub login_attempts_reset: SystemTime,
+}
+
+#[derive(Queryable, Selectable, Insertable)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct ObjectDownloadToken {
+    pub token: Uuid,
+    pub object_id: Uuid,
+    pub used: bool,
 }

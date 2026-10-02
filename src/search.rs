@@ -37,11 +37,11 @@ impl From<(Uuid, String)> for ShortObject {
 #[derive(Serialize)]
 pub struct SearchResult {
     #[serde(skip_serializing_if = "Option::is_none")]
-    users: Option<Vec<PublicUserInfo>>,
+    pub users: Option<Vec<PublicUserInfo>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    worlds: Option<Vec<ShortObject>>,
+    pub worlds: Option<Vec<ShortObject>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatars: Option<Vec<ShortObject>>,
+    pub avatars: Option<Vec<ShortObject>>,
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -93,6 +93,14 @@ diesel::table! {
 }
 
 diesel::table! {
+    object_download_tokens (token) {
+        token -> Uuid,
+        object_id -> Uuid,
+        used -> Bool,
+    }
+}
+
+diesel::table! {
     objects (id) {
         id -> Uuid,
         #[max_length = 32]
@@ -193,6 +201,7 @@ diesel::joinable!(chat_session_messages -> users (user));
 diesel::joinable!(instances -> objects (world));
 diesel::joinable!(ip_addresses -> users (user));
 diesel::joinable!(notifications -> users (target));
+diesel::joinable!(object_download_tokens -> objects (object_id));
 diesel::joinable!(objects -> licenses (license));
 diesel::joinable!(tags -> objects (object));
 diesel::joinable!(tokens -> users (user));
@@ -208,6 +217,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     licenses,
     moderations,
     notifications,
+    object_download_tokens,
     objects,
     tags,
     tokens,

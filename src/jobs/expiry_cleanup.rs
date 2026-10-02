@@ -4,7 +4,9 @@ use diesel_async::{
     AsyncPgConnection, RunQueryDsl, pooled_connection::AsyncDieselConnectionManager,
 };
 
-use crate::schema::{chat_session_messages, notifications, tokens, unverified_users, users};
+use crate::schema::{
+    chat_session_messages, notifications, object_download_tokens, tokens, unverified_users, users,
+};
 
 pub async fn run_expiry_cleanup(
     conn: &mut PooledConnection<'_, AsyncDieselConnectionManager<AsyncPgConnection>>,
@@ -37,6 +39,11 @@ pub async fn run_expiry_cleanup(
         .unwrap();
 
     delete(unverified_users::table.filter(unverified_users::expires.le(diesel::dsl::now)))
+        .execute(conn)
+        .await
+        .unwrap();
+
+    delete(object_download_tokens::table.filter(object_download_tokens::used.eq(true)))
         .execute(conn)
         .await
         .unwrap();

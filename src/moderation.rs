@@ -1,26 +1,149 @@
 use crate::ApiError;
 use crate::AppState;
 use crate::auth;
-use crate::models::ObjectType;
 use crate::models::PermissionsLevel;
-use crate::models::User;
 use crate::permission_checker;
 use crate::schema::objects;
+use crate::schema::tags;
 use crate::schema::users;
-use axum::Extension;
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::middleware;
-use axum::{Json, Router, routing::get};
+use axum::{Json, Router, routing::get, routing::post};
 use diesel::prelude::*;
-use diesel::update;
 use diesel_async::RunQueryDsl;
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
+const MODERATION_ROUTE: &str = "/mod";
+const MODERATOR_SEARCH_ROUTE: &str = constcat::concat!(MODERATION_ROUTE, "/search");
+const MODERATION_MODERATE_OBJECT_ROUTE: &str =
+    constcat::concat!(MODERATION_ROUTE, "/moderate_object");
+const MODERATION_MODERATE_USER_ROUTE: &str = constcat::concat!(MODERATION_ROUTE, "/moderate_user");
+const MODERATION_AQUIRE_OBJECT_TOKEN_ROUTE: &str =
+    constcat::concat!(MODERATION_ROUTE, "/object_token");
+
+pub async fn is_moderator() -> StatusCode {
+    StatusCode::OK
+}
+
+#[derive(Deserialize)]
+enum SearchType {
+    Objects,
+    Users,
+}
+
+#[derive(Deserialize)]
+struct ModeratorSearchRequest {
+    search_term: String,
+    search_type: SearchType,
+    target_id: Option<Uuid>,
+}
+
+#[derive(Serialize)]
+struct ModerationShortResult {
+    id: Uuid,
+    name: String,
+}
+
+impl From<(Uuid, String)> for ModerationShortResult {
+    fn from((id, name): (Uuid, String)) -> Self {
+        Self { id, name }
+    }
+}
+
+#[derive(Serialize)]
+struct ModeratorSearchResult {
+    info: Vec<ModerationShortResult>,
+}
+
+impl From<Vec<ModerationShortResult>> for ModeratorSearchResult {
+    fn from(info: Vec<ModerationShortResult>) -> Self {
+        Self { info }
+    }
+}
+
+pub async fn moderator_search(
+    State(app_state): State<Arc<AppState>>,
+    Json(request): Json<ModeratorSearchRequest>,
+) -> Result<Json<ModeratorSearchResult>, ApiError> {
+    let mut conn = app_state.pool.get().await?;
+
+    if let Some(target_id) = request.target_id {
+        return Ok(Json(
+            match request.search_type {
+                SearchType::Objects => [objects::table
+                    .select((objects::id, objects::name))
+                    .distinct_on(objects::id)
+                    .filter(objects::id.eq(target_id))
+                    .first::<(Uuid, String)>(&mut conn)
+                    .await?]
+                .into_iter()
+                .map(ModerationShortResult::from)
+                .collect::<Vec<ModerationShortResult>>(),
+                SearchType::Users => [users::table
+                    .select((users::id, users::username))
+                    .filter(users::id.eq(target_id))
+                    .first::<(Uuid, String)>(&mut conn)
+                    .await?]
+                .into_iter()
+                .map(ModerationShortResult::from)
+                .collect::<Vec<ModerationShortResult>>(),
+            }
+            .into(),
+        ));
+    }
+
+    let search_term = &request.search_term;
+
+    Ok(Json(
+        match request.search_type {
+            SearchType::Objects => objects::table
+                .select((objects::id, objects::name))
+                .distinct_on(objects::id)
+                .left_join(tags::table)
+                .inner_join(users::table.on(users::id.eq(objects::creator)))
+                .filter(
+                    objects::name
+                        .like(format!("%{search_term}%"))
+                        .or(objects::description.like(format!("%{search_term}%")))
+                        .or(tags::tag.like(format!("%{search_term}%")))
+                        .or(users::username.like(format!("%{search_term}%"))),
+                )
+                .filter(objects::delete_at.is_null())
+                .limit(5000)
+                .load::<(Uuid, String)>(&mut conn)
+                .await?
+                .into_iter()
+                .map(ModerationShortResult::from)
+                .collect::<Vec<ModerationShortResult>>(),
+            SearchType::Users => users::table
+                .select((users::id, users::username))
+                .distinct_on(users::id)
+                .filter(users::username.like(format!("%{search_term}%")))
+                .limit(100)
+                .load::<(Uuid, String)>(&mut conn)
+                .await?
+                .into_iter()
+                .map(ModerationShortResult::from)
+                .collect::<Vec<ModerationShortResult>>(),
+        }
+        .into(),
+    ))
+}
+
 pub fn moderation_router(app_state: Arc<AppState>) -> Router {
     Router::new()
+        .route(MODERATION_ROUTE, get(is_moderator))
+        .route(MODERATOR_SEARCH_ROUTE, post(moderator_search))
+        .route(MODERATION_MODERATE_OBJECT_ROUTE, post(moderate_object))
+        .route(MODERATION_MODERATE_USER_ROUTE, post(moderate_user))
+        .route(
+            MODERATION_AQUIRE_OBJECT_TOKEN_ROUTE,
+            get(aquire_object_token),
+        )
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth::check_auth,

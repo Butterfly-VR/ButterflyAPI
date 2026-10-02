@@ -33,6 +33,7 @@ mod instance_api;
 mod instances;
 mod jobs;
 mod kube_resources;
+mod maintenance_layer;
 pub mod models;
 mod moderation;
 mod object_download_token;
@@ -45,7 +46,8 @@ mod user;
 mod users;
 
 const ROUTE_ORIGIN: &str = "/api/v0";
-const COFFEE_ORIGIN: &str = "/api/v0/coffee";
+const COFFEE_ORIGIN: &str = "/api/v0/make_me_a_coffee";
+const COFFEE_ORIGIN2: &str = "/api/v0/sudo_make_me_a_coffee";
 const HEALTH_CHECK_ORIGIN: &str = "/api/v0/health";
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(15);
 
@@ -70,6 +72,7 @@ enum ErrorCode {
     BadRequestLength,
     InvalidRequest,
     InsufficientSpace,
+    DownForMaintenance,
 }
 
 enum ApiError {
@@ -111,7 +114,7 @@ struct AppState {
     object_cache: moka::future::Cache<Uuid, CacheEntry>,
     image_cache: moka::future::Cache<Uuid, CacheEntry>,
     server_variant_cache: moka::future::Cache<Uuid, CacheEntry>,
-    last_health_check: SystemTime,
+    last_health_check: RwLock<SystemTime>,
 }
 
 #[derive(Debug, Clone)]
@@ -192,7 +195,7 @@ async fn main() {
                 v.size_kb.min((SERVER_VARIANT_CACHE_SIZE_KB / 1000) as u32)
             })
             .build(),
-        last_health_check: SystemTime::now(),
+        last_health_check: RwLock::new(SystemTime::now()),
     });
 
     let health_check_state = app_state.clone();
@@ -204,14 +207,15 @@ async fn main() {
             get(async move || {
                 // endpoint is public so we need to avoid spamming health checks
                 if SystemTime::now()
-                    .duration_since(health_check_state.last_health_check)
+                    .duration_since(*health_check_state.last_health_check.read().await)
                     .unwrap_or_default()
                     > HEALTH_CHECK_INTERVAL
                 {
                     return http::StatusCode::OK;
                 }
-                // this route is used as a health check
-                // so we should check the database connection and clients
+                *health_check_state.last_health_check.write().await = SystemTime::now();
+
+                // check the database connection and clients
                 let _ = black_box(
                     schema::users::table
                         .select(schema::users::id)
@@ -238,9 +242,9 @@ async fn main() {
                 http::StatusCode::OK
             }),
         )
+        .route(COFFEE_ORIGIN, get(|| async { http::StatusCode::FORBIDDEN }))
         .route(
-            COFFEE_ORIGIN,
-            // this is also used as a liveness check
+            COFFEE_ORIGIN2,
             get(|| async { http::StatusCode::IM_A_TEAPOT }),
         )
         .nest(ROUTE_ORIGIN, users::users_router(app_state.clone()))

@@ -18,5 +18,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 pub fn object_download_token_router(app_state: Arc<AppState>) -> Router {
-    Router::new().with_state(app_state)
+    Router::new()
+        .route("/spend_token/{token}", get(get_object_from_token))
+        .route("/token_details/{token}", get(get_object_info_from_token))
+        .with_state(app_state)
 }
