@@ -97,6 +97,7 @@ diesel::table! {
         token -> Uuid,
         object_id -> Uuid,
         used -> Bool,
+        expiry -> Timestamp,
     }
 }
 

@@ -1,20 +1,29 @@
 use crate::ApiError;
 use crate::AppState;
 use crate::auth;
+use crate::models::Moderation;
+use crate::models::ObjectType;
 use crate::models::PermissionsLevel;
 use crate::permission_checker;
+use crate::schema::moderations;
 use crate::schema::objects;
 use crate::schema::tags;
+use crate::schema::tokens;
 use crate::schema::users;
+use axum::Extension;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
+use diesel::delete;
+use diesel::insert_into;
 use diesel::prelude::*;
+use diesel::update;
 use diesel_async::RunQueryDsl;
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::SystemTime;
 use uuid::Uuid;
 
 const MODERATION_ROUTE: &str = "/mod";
@@ -132,6 +141,88 @@ pub async fn moderator_search(
         }
         .into(),
     ))
+}
+
+#[derive(Deserialize)]
+enum ObjectActions {
+    Remove,
+    Verify,
+}
+
+#[derive(Deserialize)]
+struct ModerateObjectRequest {
+    target: Uuid,
+    target_type: ObjectType,
+    action: ObjectActions,
+}
+
+pub async fn moderate_object(
+    State(app_state): State<Arc<AppState>>,
+    Json(request): Json<ModerateObjectRequest>,
+) -> Result<(), ApiError> {
+    let mut conn = app_state.pool.get().await?;
+    match request.action {
+        ObjectActions::Remove => {
+            update(objects::table)
+                .filter(objects::id.eq(request.target))
+                .filter(objects::object_type.eq(request.target_type as i16))
+                .set(objects::delete_at.eq(SystemTime::now()))
+                .execute(&mut conn)
+                .await?;
+            Ok(())
+        }
+        ObjectActions::Verify => {
+            update(objects::table)
+                .filter(objects::id.eq(request.target))
+                .filter(objects::object_type.eq(request.target_type as i16))
+                .set(objects::verified.eq(true))
+                .execute(&mut conn)
+                .await?;
+            Ok(())
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub enum UserModerationType {
+    Ban,
+}
+
+#[derive(Deserialize)]
+struct UserModerationRequest {
+    pub target: Uuid,
+    pub moderation_type: UserModerationType,
+    pub expiry: Option<SystemTime>,
+    pub reason: Option<String>,
+}
+
+pub async fn moderate_user(
+    State(app_state): State<Arc<AppState>>,
+    Extension(user_id): Extension<Uuid>,
+    Json(request): Json<UserModerationRequest>,
+) -> Result<(), ApiError> {
+    let mut conn = app_state.pool.get().await?;
+
+    match request.moderation_type {
+        UserModerationType::Ban => {
+            insert_into(moderations::table)
+                .values(Moderation {
+                    id: Uuid::new_v4(),
+                    target: request.target,
+                    moderator: Some(user_id),
+                    type_: request.moderation_type as i16,
+                    expires: request.expiry,
+                    details: request.reason,
+                })
+                .execute(&mut conn)
+                .await?;
+            delete(tokens::table)
+                .filter(tokens::user.eq(request.target))
+                .execute(&mut conn)
+                .await?;
+            Ok(())
+        }
+    }
 }
 
 pub fn moderation_router(app_state: Arc<AppState>) -> Router {

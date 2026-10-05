@@ -1,9 +1,9 @@
 #![warn(clippy::all, clippy::pedantic, clippy::nursery)]
 
 use crate::hash::HASHER_MEMORY;
-use axum::Json;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
+use axum::{Json, middleware};
 use axum::{Router, http, routing::get};
 use bb8::Pool;
 use diesel::QueryDsl;
@@ -73,6 +73,7 @@ enum ErrorCode {
     InvalidRequest,
     InsufficientSpace,
     DownForMaintenance,
+    Banned,
 }
 
 enum ApiError {
@@ -265,7 +266,8 @@ async fn main() {
             ROUTE_ORIGIN,
             object_download_token::object_download_token_router(app_state.clone()),
         )
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        .layer(middleware::from_fn(maintenance_layer::maintenance_layer));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:80").await.unwrap();
 

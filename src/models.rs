@@ -5,7 +5,6 @@ use uuid::Uuid;
 
 use crate::schema::*;
 
-// diesel dosent like enums so we dont define these on db
 #[derive(Deserialize, Clone, Copy)]
 pub enum ObjectType {
     World = 0,
@@ -260,4 +259,17 @@ pub struct ObjectDownloadToken {
     pub token: Uuid,
     pub object_id: Uuid,
     pub used: bool,
+    pub expiry: SystemTime,
+}
+
+#[derive(Queryable, Selectable, Insertable, Associations)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(belongs_to(User, foreign_key = target))]
+pub struct Moderation {
+    pub id: Uuid,
+    pub target: Uuid,
+    pub moderator: Option<Uuid>,
+    pub type_: i16,
+    pub expires: Option<SystemTime>,
+    pub details: Option<String>,
 }

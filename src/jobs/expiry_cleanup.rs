@@ -1,5 +1,7 @@
+use std::time::SystemTime;
+
 use bb8::PooledConnection;
-use diesel::{ExpressionMethods, QueryDsl, delete};
+use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, delete};
 use diesel_async::{
     AsyncPgConnection, RunQueryDsl, pooled_connection::AsyncDieselConnectionManager,
 };
@@ -43,8 +45,14 @@ pub async fn run_expiry_cleanup(
         .await
         .unwrap();
 
-    delete(object_download_tokens::table.filter(object_download_tokens::used.eq(true)))
-        .execute(conn)
-        .await
-        .unwrap();
+    delete(
+        object_download_tokens::table.filter(
+            object_download_tokens::used
+                .eq(true)
+                .or(object_download_tokens::expiry.eq(SystemTime::now())),
+        ),
+    )
+    .execute(conn)
+    .await
+    .unwrap();
 }

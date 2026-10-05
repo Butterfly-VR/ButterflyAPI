@@ -6,8 +6,11 @@ use crate::auth::check_auth;
 use crate::email::check_email;
 use crate::hash::hash_password;
 use crate::models::IpInfo;
+use crate::models::Moderation;
 use crate::models::{PublicUserInfo, Token, User};
+use crate::moderation;
 use crate::schema::ip_infos;
+use crate::schema::moderations;
 use crate::schema::tokens::dsl::tokens;
 use crate::schema::users::dsl::{email, id, users};
 use axum::Extension;
@@ -16,6 +19,7 @@ use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
+use diesel::delete;
 use diesel::insert_into;
 use diesel::prelude::*;
 use diesel::update;
@@ -137,6 +141,28 @@ pub async fn sign_in(
                 .await?;
         }
 
+        let moderations = moderations::table.inner_join(users.on(moderations::target.eq(id)))
+            .select(Moderation::as_select())
+            .filter(email.eq(&json.email)).filter(moderations::expires.lt(SystemTime::now()))
+            .load(&mut conn)
+            .await?;
+
+        if let Some(x) = moderations.into_iter().find(|x| x.type_ == moderation::UserModerationType::Ban as i16) {
+            let expire_string = match x.expires {
+                Some(expires) => format!(" (expires: {:#?})", expires),
+                None => "".to_string(),
+            };
+
+            return Err(ApiError::WithResponse(StatusCode::FORBIDDEN, Json(ErrorInfo {
+                error_code: ErrorCode::Banned,
+                error_message: Some(
+                    format!(
+                        "You have been banned for the following reason{}: {}",
+                        expire_string,
+                        x.details.unwrap_or_default())),
+            })));
+        }
+
         // start of 'critical' section (see top of function)
         if let Ok(u) = users
             .select(User::as_select())
@@ -205,15 +231,50 @@ pub async fn sign_in(
 
 pub async fn renew(
     State(state): State<Arc<AppState>>,
-    user_id: Extension<Uuid>,
+    Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<SignInResponse>, ApiError> {
     let mut conn = state.pool.get().await?;
+
+    let moderations = moderations::table
+        .inner_join(users.on(moderations::target.eq(id)))
+        .select(Moderation::as_select())
+        .filter(id.eq(user_id))
+        .filter(moderations::expires.lt(SystemTime::now()))
+        .load(&mut conn)
+        .await?;
+
+    if let Some(x) = moderations
+        .into_iter()
+        .find(|x| x.type_ == moderation::UserModerationType::Ban as i16)
+    {
+        let expire_string = match x.expires {
+            Some(expires) => format!(" (expires: {:#?})", expires),
+            None => "".to_string(),
+        };
+
+        delete(tokens)
+            .filter(crate::schema::tokens::user.eq(user_id))
+            .execute(&mut conn)
+            .await?;
+
+        return Err(ApiError::WithResponse(
+            StatusCode::FORBIDDEN,
+            Json(ErrorInfo {
+                error_code: ErrorCode::Banned,
+                error_message: Some(format!(
+                    "You have been banned for the following reason{}: {}",
+                    expire_string,
+                    x.details.unwrap_or_default()
+                )),
+            }),
+        ));
+    }
 
     let mut t = vec![0; 64];
     SysRng.try_fill_bytes(&mut t)?;
 
     let token_value: Token = Token {
-        user: user_id.0,
+        user: user_id,
         token: t,
         renewable: true,
         expires: SystemTime::now() + NEW_TOKEN_EXPIRY,
