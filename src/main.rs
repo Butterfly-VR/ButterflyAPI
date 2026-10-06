@@ -110,7 +110,7 @@ struct AppState {
     pool: Pool<AsyncDieselConnectionManager<AsyncPgConnection>>,
     s3_client: aws_sdk_s3::Client,
     kube_client: kube::Client,
-    hasher_memory: [Mutex<Vec<argon2::Block>>; HASHER_MEMORY_BLOCKS],
+    hasher_memory: [Mutex<Box<[argon2::Block]>>; HASHER_MEMORY_BLOCKS],
     user_rate_limits: RwLock<HashMap<Uuid, RateLimitInfo>>,
     object_cache: moka::future::Cache<Uuid, CacheEntry>,
     image_cache: moka::future::Cache<Uuid, CacheEntry>,
@@ -173,7 +173,7 @@ async fn main() {
         s3_client,
         kube_client,
         hasher_memory: std::array::from_fn(|_| {
-            Mutex::new(vec![argon2::Block::new(); HASHER_MEMORY as usize])
+            Mutex::new(vec![argon2::Block::new(); HASHER_MEMORY as usize].into_boxed_slice())
         }),
         user_rate_limits: RwLock::new(HashMap::with_capacity(1024)),
         object_cache: moka::future::Cache::builder()

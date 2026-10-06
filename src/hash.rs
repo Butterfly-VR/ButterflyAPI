@@ -60,7 +60,7 @@ pub async fn hash_password(
         };
         let mut out = vec![0_u8; 64];
         if Argon2::new(HASHER_ALGORITHM, HASHER_VERSION, HASHER_PARAMETERS.clone())
-            .hash_password_into_with_memory(&pwd, &slt, &mut out, block.as_mut_slice())
+            .hash_password_into_with_memory(&pwd, &slt, &mut out, &mut **block)
             .is_ok()
         {
             Ok(out)
