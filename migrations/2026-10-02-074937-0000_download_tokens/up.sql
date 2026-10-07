@@ -6,6 +6,7 @@ CREATE TABLE object_download_tokens (
 );
 
 CREATE INDEX "idx_object_download_tokens_object_id" ON "object_download_tokens" (object_id);
+CREATE INDEX "idx_object_download_tokens_expiry" ON "object_download_tokens" (expiry);
 
 ALTER TABLE "object_download_tokens"
     ADD CONSTRAINT "fk_object_download_tokens_object_id_objects"

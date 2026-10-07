@@ -1,11 +1,15 @@
 use crate::ApiError;
 use crate::AppState;
+use crate::ErrorCode;
+use crate::ErrorInfo;
 use crate::auth;
 use crate::models::Moderation;
+use crate::models::ObjectDownloadToken;
 use crate::models::ObjectType;
 use crate::models::PermissionsLevel;
 use crate::permission_checker;
 use crate::schema::moderations;
+use crate::schema::object_download_tokens;
 use crate::schema::objects;
 use crate::schema::tags;
 use crate::schema::tokens;
@@ -23,6 +27,7 @@ use diesel_async::RunQueryDsl;
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::SystemTime;
 use uuid::Uuid;
 
@@ -45,7 +50,7 @@ enum SearchType {
 }
 
 #[derive(Deserialize)]
-struct ModeratorSearchRequest {
+pub struct ModeratorSearchRequest {
     search_term: String,
     search_type: SearchType,
     target_id: Option<Uuid>,
@@ -54,23 +59,39 @@ struct ModeratorSearchRequest {
 #[derive(Serialize)]
 struct ModerationShortResult {
     id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    creator: Option<Uuid>,
     name: String,
+}
+
+impl From<(Uuid, Uuid, String)> for ModerationShortResult {
+    fn from((id, creator, name): (Uuid, Uuid, String)) -> Self {
+        Self {
+            id,
+            creator: Some(creator),
+            name,
+        }
+    }
 }
 
 impl From<(Uuid, String)> for ModerationShortResult {
     fn from((id, name): (Uuid, String)) -> Self {
-        Self { id, name }
+        Self {
+            id,
+            creator: None,
+            name,
+        }
     }
 }
 
 #[derive(Serialize)]
-struct ModeratorSearchResult {
-    info: Vec<ModerationShortResult>,
+pub struct ModeratorSearchResult {
+    results: Vec<ModerationShortResult>,
 }
 
 impl From<Vec<ModerationShortResult>> for ModeratorSearchResult {
-    fn from(info: Vec<ModerationShortResult>) -> Self {
-        Self { info }
+    fn from(results: Vec<ModerationShortResult>) -> Self {
+        Self { results }
     }
 }
 
@@ -84,10 +105,10 @@ pub async fn moderator_search(
         return Ok(Json(
             match request.search_type {
                 SearchType::Objects => [objects::table
-                    .select((objects::id, objects::name))
+                    .select((objects::id, objects::creator, objects::name))
                     .distinct_on(objects::id)
                     .filter(objects::id.eq(target_id))
-                    .first::<(Uuid, String)>(&mut conn)
+                    .first::<(Uuid, Uuid, String)>(&mut conn)
                     .await?]
                 .into_iter()
                 .map(ModerationShortResult::from)
@@ -150,7 +171,7 @@ enum ObjectActions {
 }
 
 #[derive(Deserialize)]
-struct ModerateObjectRequest {
+pub struct ModerateObjectRequest {
     target: Uuid,
     target_type: ObjectType,
     action: ObjectActions,
@@ -189,7 +210,7 @@ pub enum UserModerationType {
 }
 
 #[derive(Deserialize)]
-struct UserModerationRequest {
+pub struct UserModerationRequest {
     pub target: Uuid,
     pub moderation_type: UserModerationType,
     pub expiry: Option<SystemTime>,
@@ -223,6 +244,55 @@ pub async fn moderate_user(
             Ok(())
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ObjectTokenResponse {
+    token: Uuid,
+}
+
+pub async fn aquire_object_token(
+    State(app_state): State<Arc<AppState>>,
+) -> Result<Json<ObjectTokenResponse>, ApiError> {
+    const TOKEN_EXPIRY: Duration = Duration::from_mins(15);
+
+    let mut conn = app_state.pool.get().await?;
+
+    let Some(object_id) = (objects::table)
+        .select(objects::id)
+        .filter(objects::verified.eq(false))
+        .filter(
+            objects::id.ne_all(
+                object_download_tokens::table
+                    .select(object_download_tokens::token)
+                    .filter(object_download_tokens::expiry.gt(SystemTime::now())),
+            ),
+        )
+        .first(&mut conn)
+        .await
+        .optional()?
+    else {
+        return Err(ApiError::WithResponse(
+            StatusCode::NOT_FOUND,
+            Json(ErrorInfo {
+                error_code: ErrorCode::DosentExist,
+                error_message: None,
+            }),
+        ));
+    };
+
+    let id = Uuid::new_v4();
+
+    insert_into(object_download_tokens::table)
+        .values(ObjectDownloadToken {
+            token: id,
+            object_id: object_id,
+            used: false,
+            expiry: SystemTime::now() + TOKEN_EXPIRY,
+        })
+        .execute(&mut conn)
+        .await?;
+    return Ok(Json(ObjectTokenResponse { token: id }));
 }
 
 pub fn moderation_router(app_state: Arc<AppState>) -> Router {
