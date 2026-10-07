@@ -5,7 +5,6 @@ use crate::ErrorInfo;
 use crate::auth;
 use crate::models::Moderation;
 use crate::models::ObjectDownloadToken;
-use crate::models::ObjectType;
 use crate::models::PermissionsLevel;
 use crate::permission_checker;
 use crate::schema::moderations;
@@ -173,7 +172,6 @@ enum ObjectActions {
 #[derive(Deserialize)]
 pub struct ModerateObjectRequest {
     target: Uuid,
-    target_type: ObjectType,
     action: ObjectActions,
 }
 
@@ -186,7 +184,6 @@ pub async fn moderate_object(
         ObjectActions::Remove => {
             update(objects::table)
                 .filter(objects::id.eq(request.target))
-                .filter(objects::object_type.eq(request.target_type as i16))
                 .set(objects::delete_at.eq(SystemTime::now()))
                 .execute(&mut conn)
                 .await?;
@@ -195,7 +192,6 @@ pub async fn moderate_object(
         ObjectActions::Verify => {
             update(objects::table)
                 .filter(objects::id.eq(request.target))
-                .filter(objects::object_type.eq(request.target_type as i16))
                 .set(objects::verified.eq(true))
                 .execute(&mut conn)
                 .await?;
@@ -249,6 +245,8 @@ pub async fn moderate_user(
 #[derive(Debug, Clone, Serialize)]
 pub struct ObjectTokenResponse {
     token: Uuid,
+    object_id: Uuid,
+    creator: Uuid,
 }
 
 pub async fn aquire_object_token(
@@ -258,8 +256,8 @@ pub async fn aquire_object_token(
 
     let mut conn = app_state.pool.get().await?;
 
-    let Some(object_id) = (objects::table)
-        .select(objects::id)
+    let Some((object_id, creator)) = (objects::table)
+        .select((objects::id, objects::creator))
         .filter(objects::verified.eq(false))
         .filter(
             objects::id.ne_all(
@@ -292,7 +290,11 @@ pub async fn aquire_object_token(
         })
         .execute(&mut conn)
         .await?;
-    return Ok(Json(ObjectTokenResponse { token: id }));
+    return Ok(Json(ObjectTokenResponse {
+        token: id,
+        object_id,
+        creator,
+    }));
 }
 
 pub fn moderation_router(app_state: Arc<AppState>) -> Router {
