@@ -28,6 +28,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::SystemTime;
+use tower::ServiceBuilder;
 use uuid::Uuid;
 
 const MODERATION_ROUTE: &str = "/mod";
@@ -55,7 +56,7 @@ pub struct ModeratorSearchRequest {
     target_id: Option<Uuid>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct ModerationShortResult {
     id: Uuid,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -108,16 +109,20 @@ pub async fn moderator_search(
                     .distinct_on(objects::id)
                     .filter(objects::id.eq(target_id))
                     .first::<(Uuid, Uuid, String)>(&mut conn)
-                    .await?]
+                    .await
+                    .optional()?]
                 .into_iter()
+                .flatten()
                 .map(ModerationShortResult::from)
                 .collect::<Vec<ModerationShortResult>>(),
                 SearchType::Users => [users::table
                     .select((users::id, users::username))
                     .filter(users::id.eq(target_id))
                     .first::<(Uuid, String)>(&mut conn)
-                    .await?]
+                    .await
+                    .optional()?]
                 .into_iter()
+                .flatten()
                 .map(ModerationShortResult::from)
                 .collect::<Vec<ModerationShortResult>>(),
             }
@@ -130,7 +135,7 @@ pub async fn moderator_search(
     Ok(Json(
         match request.search_type {
             SearchType::Objects => objects::table
-                .select((objects::id, objects::name))
+                .select((objects::id, objects::creator, objects::name))
                 .distinct_on(objects::id)
                 .left_join(tags::table)
                 .inner_join(users::table.on(users::id.eq(objects::creator)))
@@ -142,8 +147,8 @@ pub async fn moderator_search(
                         .or(users::username.like(format!("%{search_term}%"))),
                 )
                 .filter(objects::delete_at.is_null())
-                .limit(5000)
-                .load::<(Uuid, String)>(&mut conn)
+                .limit(100)
+                .load::<(Uuid, Uuid, String)>(&mut conn)
                 .await?
                 .into_iter()
                 .map(ModerationShortResult::from)
@@ -209,7 +214,7 @@ pub enum UserModerationType {
 pub struct UserModerationRequest {
     pub target: Uuid,
     pub moderation_type: UserModerationType,
-    pub expiry: Option<SystemTime>,
+    pub expiry_utc: Option<usize>,
     pub reason: Option<String>,
 }
 
@@ -228,7 +233,9 @@ pub async fn moderate_user(
                     target: request.target,
                     moderator: Some(user_id),
                     type_: request.moderation_type as i16,
-                    expires: request.expiry,
+                    expires: request
+                        .expiry_utc
+                        .map(|t| SystemTime::UNIX_EPOCH + Duration::from_secs(t as u64)),
                     details: request.reason,
                 })
                 .execute(&mut conn)
@@ -307,20 +314,23 @@ pub fn moderation_router(app_state: Arc<AppState>) -> Router {
             MODERATION_AQUIRE_OBJECT_TOKEN_ROUTE,
             get(aquire_object_token),
         )
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            auth::check_auth,
-        ))
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            |state, req, next| {
-                permission_checker::check_permissions(
-                    vec![PermissionsLevel::Moderator, PermissionsLevel::Admin],
-                    state,
-                    req,
-                    next,
-                )
-            },
-        ))
+        .layer(
+            ServiceBuilder::new()
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    auth::check_auth,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    |state, req, next| {
+                        permission_checker::check_permissions(
+                            vec![PermissionsLevel::Moderator, PermissionsLevel::Admin],
+                            state,
+                            req,
+                            next,
+                        )
+                    },
+                )),
+        )
         .with_state(app_state)
 }

@@ -10,7 +10,7 @@ use tracing::warn;
 // these values might seem low but consider the main attack vector for a weak password hasher
 // is a dictionary attack, the server operates on the hashed output from the client side hash
 // therefore, an attacker would need to perform a brute force attack covering all possible hash outputs
-// to crack a password.
+// to crack a password, or hash using the client side hashing first which is much slower
 pub const HASHER_MEMORY: u32 = 64_000;
 const HASHER_ITERATIONS: u32 = 1;
 const HASHER_OUTPUT_LEN: u32 = 64;

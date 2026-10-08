@@ -33,6 +33,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::SystemTime;
+use time::OffsetDateTime;
 use tokio::time::Instant;
 use tokio::time::sleep;
 use tracing::trace;
@@ -143,13 +144,14 @@ pub async fn sign_in(
 
         let moderations = moderations::table.inner_join(users.on(moderations::target.eq(id)))
             .select(Moderation::as_select())
-            .filter(email.eq(&json.email)).filter(moderations::expires.lt(SystemTime::now()))
+            .filter(email.eq(&json.email)).filter(
+                moderations::expires.gt(SystemTime::now()).or(moderations::expires.is_null()))
             .load(&mut conn)
             .await?;
 
         if let Some(x) = moderations.into_iter().find(|x| x.type_ == moderation::UserModerationType::Ban as i16) {
             let expire_string = match x.expires {
-                Some(expires) => format!(" (expires: {:#?})", expires),
+                Some(expires) => format!(" (expires: {})", OffsetDateTime::from(expires).date().to_string()),
                 None => "".to_string(),
             };
 

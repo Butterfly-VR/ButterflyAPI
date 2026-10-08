@@ -34,6 +34,7 @@ dependencies = [
  "sha2 0.11.0",
  "tempfile",
  "thiserror",
+ "time 0.3.55",
  "tokio",
  "tokio-util",
  "tower",
@@ -214,7 +215,7 @@ dependencies = [
  "hex",
  "http 1.4.2",
  "sha1 0.10.6",
- "time 0.3.49",
+ "time 0.3.55",
  "tokio",
  "tracing",
  "url",
@@ -418,7 +419,7 @@ dependencies = [
  "percent-encoding",
  "sha2 0.11.0",
  "subtle",
- "time 0.3.49",
+ "time 0.3.55",
  "tracing",
  "zeroize",
 ]
@@ -635,7 +636,7 @@ dependencies = [
  "pin-utils",
  "ryu",
  "serde",
- "time 0.3.49",
+ "time 0.3.55",
  "tokio",
  "tokio-util",
 ]
@@ -3886,9 +3887,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.49"
+version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "711a53c2d47bbd818258c498c8dbfe186a2526c631495cfe7e078567f86b8469"
+checksum = "cdb87b95ec50ddfa440816d227a17b2ccbdda963a316a727fda0fc4334f7d134"
 dependencies = [
  "deranged",
  "num-conv",
@@ -3906,9 +3907,9 @@ checksum = "9e1c906769ad99c88eaa54e728060edef082f8e358ff32030cb7c7d315e81109"
 
 [[package]]
 name = "time-macros"
-version = "0.2.29"
+version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71c652a3727a9cbb9a02f707f530b618ce00d0ccd762009c8c23bd191df3c17d"
+checksum = "7e689342a48d2ea927c87ea50cabf8594854bf940e9310208848d680d668ed85"
 dependencies = [
  "num-conv",
  "time-core",

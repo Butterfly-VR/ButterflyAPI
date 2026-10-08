@@ -1,9 +1,9 @@
 #![warn(clippy::all, clippy::pedantic, clippy::nursery)]
 
 use crate::hash::HASHER_MEMORY;
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::{Json, middleware};
 use axum::{Router, http, routing::get};
 use bb8::Pool;
 use diesel::QueryDsl;
@@ -33,7 +33,6 @@ mod instance_api;
 mod instances;
 mod jobs;
 mod kube_resources;
-mod maintenance_layer;
 pub mod models;
 mod moderation;
 mod object_download_token;
@@ -49,7 +48,7 @@ const ROUTE_ORIGIN: &str = "/api/v0";
 const COFFEE_ORIGIN: &str = "/api/v0/make_me_a_coffee";
 const COFFEE_ORIGIN2: &str = "/api/v0/sudo_make_me_a_coffee";
 const HEALTH_CHECK_ORIGIN: &str = "/api/v0/health";
-const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(15);
+const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 
 // combined should be < deployment cache volume size
 const OBJECT_CACHE_SIZE_KB: u64 = 1024 * 1024 * 8;
@@ -72,7 +71,6 @@ enum ErrorCode {
     BadRequestLength,
     InvalidRequest,
     InsufficientSpace,
-    DownForMaintenance,
     Banned,
 }
 
@@ -210,7 +208,7 @@ async fn main() {
                 if SystemTime::now()
                     .duration_since(*health_check_state.last_health_check.read().await)
                     .unwrap_or_default()
-                    > HEALTH_CHECK_INTERVAL
+                    < HEALTH_CHECK_INTERVAL
                 {
                     return http::StatusCode::OK;
                 }
@@ -266,8 +264,7 @@ async fn main() {
             ROUTE_ORIGIN,
             object_download_token::object_download_token_router(app_state.clone()),
         )
-        .layer(TraceLayer::new_for_http())
-        .layer(middleware::from_fn(maintenance_layer::maintenance_layer));
+        .layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:80").await.unwrap();
 

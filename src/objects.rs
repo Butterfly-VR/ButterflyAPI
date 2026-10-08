@@ -292,6 +292,7 @@ pub struct ObjectInfo {
 
 pub async fn get_object_info(
     state: State<Arc<AppState>>,
+    Extension(user): Extension<Uuid>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Json<ObjectInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
@@ -302,6 +303,7 @@ pub async fn get_object_info(
         .filter(objects::id.eq(&object_id))
         .filter(objects::object_type.eq(object_type as i16))
         .filter(objects::delete_at.is_null())
+        .filter(objects::verified.eq(true).or(objects::creator.eq(user)))
         .first::<(Object, String)>(&mut conn)
         .await
         .optional()?
