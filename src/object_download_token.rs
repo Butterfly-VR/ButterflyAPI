@@ -12,10 +12,12 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::{Json, Router, routing::get};
 use diesel::prelude::*;
+use diesel::update;
 use diesel_async::RunQueryDsl;
 use serde::Serialize;
 use sha2::Digest;
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
@@ -41,6 +43,8 @@ pub async fn get_object_info_from_token(
         .inner_join(objects::table)
         .select(Object::as_select())
         .filter(object_download_tokens::token.eq(token))
+        .filter(object_download_tokens::expiry.gt(SystemTime::now()))
+        .filter(object_download_tokens::used.eq(false))
         .first(&mut conn)
         .await
         .optional()?
@@ -102,6 +106,8 @@ pub async fn get_object_from_token(
         .inner_join(objects::table)
         .select(Object::as_select())
         .filter(object_download_tokens::token.eq(token))
+        .filter(object_download_tokens::expiry.gt(SystemTime::now()))
+        .filter(object_download_tokens::used.eq(false))
         .first(&mut conn)
         .await
         .optional()?
@@ -127,6 +133,13 @@ pub async fn get_object_from_token(
         .send()
         .await?;
     let x = object.body.into_async_read();
+
+    update(object_download_tokens::table)
+        .filter(object_download_tokens::token.eq(token))
+        .set(object_download_tokens::used.eq(true))
+        .execute(&mut conn)
+        .await?;
+
     Ok(Body::from_stream(tokio_util::io::ReaderStream::new(x)))
 }
 

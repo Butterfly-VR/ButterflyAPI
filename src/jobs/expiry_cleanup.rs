@@ -49,7 +49,7 @@ pub async fn run_expiry_cleanup(
         object_download_tokens::table.filter(
             object_download_tokens::used
                 .eq(true)
-                .or(object_download_tokens::expiry.eq(SystemTime::now())),
+                .or(object_download_tokens::expiry.lt(SystemTime::now())),
         ),
     )
     .execute(conn)

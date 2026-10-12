@@ -266,13 +266,6 @@ pub async fn aquire_object_token(
     let Some((object_id, creator)) = (objects::table)
         .select((objects::id, objects::creator))
         .filter(objects::verified.eq(false))
-        .filter(
-            objects::id.ne_all(
-                object_download_tokens::table
-                    .select(object_download_tokens::token)
-                    .filter(object_download_tokens::expiry.gt(SystemTime::now())),
-            ),
-        )
         .first(&mut conn)
         .await
         .optional()?
