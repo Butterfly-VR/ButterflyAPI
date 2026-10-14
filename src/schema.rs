@@ -96,7 +96,7 @@ diesel::table! {
     object_download_tokens (token) {
         token -> Uuid,
         object_id -> Uuid,
-        used -> Bool,
+        current_step -> Int2,
         expiry -> Timestamp,
     }
 }

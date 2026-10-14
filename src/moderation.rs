@@ -285,7 +285,7 @@ pub async fn aquire_object_token(
         .values(ObjectDownloadToken {
             token: id,
             object_id: object_id,
-            used: false,
+            current_step: 0,
             expiry: SystemTime::now() + TOKEN_EXPIRY,
         })
         .execute(&mut conn)

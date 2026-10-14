@@ -555,79 +555,6 @@ pub async fn get_object_server_variant_file(
     Ok(Body::from_stream(tokio_util::io::ReaderStream::new(x)))
 }
 
-pub async fn change_object_server_variant_file(
-    state: State<Arc<AppState>>,
-    Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
-    Extension(user_id): Extension<Uuid>,
-    body: Body,
-) -> Result<(), ApiError> {
-    let mut conn = state.pool.get().await?;
-
-    if let Some(object) = objects::table
-        .select(Object::as_select())
-        .filter(objects::id.eq(&object_id))
-        .filter(objects::object_type.eq(object_type as i16))
-        .first(&mut conn)
-        .await
-        .optional()?
-    {
-        let object: Object = object;
-
-        if object.creator != user_id {
-            return Err(ApiError::WithResponse(
-                StatusCode::FORBIDDEN,
-                Json(ErrorInfo {
-                    error_code: ErrorCode::InsufficientPermissions,
-                    error_message: Some(
-                        "You do not have permission to edit this object.".to_owned(),
-                    ),
-                }),
-            ));
-        }
-
-        state.server_variant_cache.invalidate(&object_id).await;
-
-        let stream = body.into_data_stream();
-
-        let enum_str: &'static str = match object_type {
-            ObjectType::World => "worlds",
-            ObjectType::Avatar => "avatars",
-        };
-        let enum_str = enum_str.to_owned() + "-server";
-
-        diesel::update(objects::table)
-            .filter(objects::id.eq(&object_id))
-            .filter(objects::object_type.eq(object_type as i16))
-            .set((
-                objects::verified.eq(false),
-                objects::updated_at.eq(SystemTime::now()),
-            ))
-            .execute(&mut conn)
-            .await?;
-
-        upload_object_stream(
-            &state.s3_client,
-            &enum_str,
-            &object_id.to_string(),
-            &mut tokio_util::io::StreamReader::new(stream.map_err(|_| {
-                std::io::Error::new(std::io::ErrorKind::NotFound, "no error handling here")
-            })),
-            object.object_size as usize / 1024,
-        )
-        .await?;
-    } else {
-        return Err(ApiError::WithResponse(
-            StatusCode::NOT_FOUND,
-            Json(ErrorInfo {
-                error_code: ErrorCode::DosentExist,
-                error_message: None,
-            }),
-        ));
-    }
-
-    Ok(())
-}
-
 pub async fn get_object_image(
     State(state): State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
@@ -784,7 +711,7 @@ pub async fn change_object_image(
     Ok(())
 }
 
-async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
+pub async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     client: &Client,
     bucket: &str,
     key: &str,
@@ -1029,7 +956,7 @@ pub fn objects_router(app_state: Arc<AppState>) -> Router {
         )
         .route(
             OBJECT_SERVER_VARIANT_DOWNLOAD_ROUTE,
-            get(get_object_server_variant_file).post(change_object_server_variant_file),
+            get(get_object_server_variant_file),
         )
         .route(
             OBJECT_IMAGE_ROUTE,

@@ -1,7 +1,7 @@
 use std::time::SystemTime;
 
 use bb8::PooledConnection;
-use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, delete};
+use diesel::{ExpressionMethods, QueryDsl, delete};
 use diesel_async::{
     AsyncPgConnection, RunQueryDsl, pooled_connection::AsyncDieselConnectionManager,
 };
@@ -13,44 +13,40 @@ use crate::schema::{
 pub async fn run_expiry_cleanup(
     conn: &mut PooledConnection<'_, AsyncDieselConnectionManager<AsyncPgConnection>>,
 ) {
-    delete(users::table.filter(users::delete_at.le(diesel::dsl::now)))
+    delete(users::table.filter(users::delete_at.le(SystemTime::now())))
         .execute(conn)
         .await
         .unwrap();
 
     delete(
-        chat_session_messages::table.filter(chat_session_messages::delete_at.le(diesel::dsl::now)),
+        chat_session_messages::table.filter(chat_session_messages::delete_at.le(SystemTime::now())),
     )
     .execute(conn)
     .await
     .unwrap();
 
-    delete(notifications::table.filter(notifications::expires.le(diesel::dsl::now)))
+    delete(notifications::table.filter(notifications::expires.le(SystemTime::now())))
         .execute(conn)
         .await
         .unwrap();
 
-    delete(unverified_users::table.filter(unverified_users::expires.le(diesel::dsl::now)))
+    delete(unverified_users::table.filter(unverified_users::expires.le(SystemTime::now())))
         .execute(conn)
         .await
         .unwrap();
 
-    delete(tokens::table.filter(tokens::expires.le(diesel::dsl::now)))
+    delete(tokens::table.filter(tokens::expires.le(SystemTime::now())))
         .execute(conn)
         .await
         .unwrap();
 
-    delete(unverified_users::table.filter(unverified_users::expires.le(diesel::dsl::now)))
+    delete(unverified_users::table.filter(unverified_users::expires.le(SystemTime::now())))
         .execute(conn)
         .await
         .unwrap();
 
     delete(
-        object_download_tokens::table.filter(
-            object_download_tokens::used
-                .eq(true)
-                .or(object_download_tokens::expiry.lt(SystemTime::now())),
-        ),
+        object_download_tokens::table.filter(object_download_tokens::expiry.lt(SystemTime::now())),
     )
     .execute(conn)
     .await

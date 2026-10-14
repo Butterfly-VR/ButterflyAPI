@@ -4,22 +4,27 @@ use crate::ErrorCode;
 use crate::ErrorInfo;
 use crate::models::Object;
 use crate::models::ObjectType;
+use crate::objects::upload_object_stream;
 use crate::schema::object_download_tokens;
 use crate::schema::objects;
 use axum::body::Body;
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::routing::post;
 use axum::{Json, Router, routing::get};
 use diesel::prelude::*;
 use diesel::update;
 use diesel_async::RunQueryDsl;
+use futures_util::TryStreamExt;
 use serde::Serialize;
-use sha2::Digest;
 use std::sync::Arc;
 use std::time::SystemTime;
-use tokio::io::AsyncReadExt;
 use uuid::Uuid;
+
+const TOKEN_STAGE1_PATH: &str = "/token_details/{token}";
+const TOKEN_STAGE2_PATH: &str = "/spend_token/{token}";
+const TOKEN_STAGE3_PATH: &str = "/upload_server_variant/{token}";
 
 #[derive(Serialize)]
 pub struct ObjectInfo {
@@ -30,7 +35,6 @@ pub struct ObjectInfo {
     pub object_type: i16,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
-    pub server_variant_hash: Vec<u8>,
 }
 
 pub async fn get_object_info_from_token(
@@ -44,7 +48,7 @@ pub async fn get_object_info_from_token(
         .select(Object::as_select())
         .filter(object_download_tokens::token.eq(token))
         .filter(object_download_tokens::expiry.gt(SystemTime::now()))
-        .filter(object_download_tokens::used.eq(false))
+        .filter(object_download_tokens::current_step.eq(0))
         .first(&mut conn)
         .await
         .optional()?
@@ -58,30 +62,6 @@ pub async fn get_object_info_from_token(
         ));
     };
 
-    let enum_str: &'static str = ObjectType::try_from(object.object_type)
-        .map_err(|_| ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?
-        .into();
-    let enum_str = enum_str.to_owned() + "-server";
-
-    let s3_object = state
-        .s3_client
-        .get_object()
-        .bucket(enum_str)
-        .key(object.id.to_string())
-        .send()
-        .await?;
-    let mut x = s3_object.body.into_async_read();
-
-    let mut buf = vec![0; 1024 * 1024];
-    let mut hasher = sha2::Sha256::new();
-    loop {
-        let length = x.read(&mut buf).await?;
-        if length == 0 {
-            break;
-        }
-        hasher.update(&buf[..length]);
-    }
-
     let object_info = ObjectInfo {
         id: object.id,
         name: object.name,
@@ -90,8 +70,13 @@ pub async fn get_object_info_from_token(
         object_type: object.object_type,
         encryption_key: object.encryption_key,
         encryption_iv: object.encryption_iv,
-        server_variant_hash: hasher.finalize().to_vec(),
     };
+
+    update(object_download_tokens::table)
+        .set(object_download_tokens::current_step.eq(1))
+        .filter(object_download_tokens::token.eq(token))
+        .execute(&mut conn)
+        .await?;
 
     return Ok(Json(object_info));
 }
@@ -107,7 +92,7 @@ pub async fn get_object_from_token(
         .select(Object::as_select())
         .filter(object_download_tokens::token.eq(token))
         .filter(object_download_tokens::expiry.gt(SystemTime::now()))
-        .filter(object_download_tokens::used.eq(false))
+        .filter(object_download_tokens::current_step.eq(1))
         .first(&mut conn)
         .await
         .optional()?
@@ -136,16 +121,89 @@ pub async fn get_object_from_token(
 
     update(object_download_tokens::table)
         .filter(object_download_tokens::token.eq(token))
-        .set(object_download_tokens::used.eq(true))
+        .set(object_download_tokens::current_step.eq(2))
         .execute(&mut conn)
         .await?;
 
     Ok(Body::from_stream(tokio_util::io::ReaderStream::new(x)))
 }
 
+pub async fn change_object_server_variant_file(
+    state: State<Arc<AppState>>,
+    Path(token): Path<Uuid>,
+    body: Body,
+) -> Result<(), ApiError> {
+    let mut conn = state.pool.get().await?;
+
+    let Some(object) = object_download_tokens::table
+        .inner_join(objects::table)
+        .select(Object::as_select())
+        .filter(object_download_tokens::token.eq(token))
+        .filter(object_download_tokens::expiry.gt(SystemTime::now()))
+        .filter(object_download_tokens::current_step.eq(2))
+        .first(&mut conn)
+        .await
+        .optional()?
+    else {
+        return Err(ApiError::WithResponse(
+            StatusCode::NOT_FOUND,
+            Json(ErrorInfo {
+                error_code: ErrorCode::DosentExist,
+                error_message: None,
+            }),
+        ));
+    };
+
+    let object: Object = object;
+
+    state.server_variant_cache.invalidate(&object.id).await;
+
+    let stream = body.into_data_stream();
+
+    let enum_str: &'static str = match object
+        .object_type
+        .try_into()
+        .map_err(|_| ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?
+    {
+        ObjectType::World => "worlds",
+        ObjectType::Avatar => "avatars",
+    };
+    let enum_str = enum_str.to_owned() + "-server";
+
+    diesel::update(objects::table)
+        .filter(objects::id.eq(&object.id))
+        .filter(objects::object_type.eq(object.object_type))
+        .set((
+            objects::verified.eq(false),
+            objects::updated_at.eq(SystemTime::now()),
+        ))
+        .execute(&mut conn)
+        .await?;
+
+    upload_object_stream(
+        &state.s3_client,
+        &enum_str,
+        &object.id.to_string(),
+        &mut tokio_util::io::StreamReader::new(stream.map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "no error handling here")
+        })),
+        object.object_size as usize / 1024,
+    )
+    .await?;
+
+    update(object_download_tokens::table)
+        .filter(object_download_tokens::token.eq(token))
+        .set(object_download_tokens::current_step.eq(3))
+        .execute(&mut conn)
+        .await?;
+
+    Ok(())
+}
+
 pub fn object_download_token_router(app_state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/token_details/{token}", get(get_object_info_from_token))
-        .route("/spend_token/{token}", get(get_object_from_token))
+        .route(TOKEN_STAGE1_PATH, get(get_object_info_from_token))
+        .route(TOKEN_STAGE2_PATH, get(get_object_from_token))
+        .route(TOKEN_STAGE3_PATH, post(change_object_server_variant_file))
         .with_state(app_state)
 }

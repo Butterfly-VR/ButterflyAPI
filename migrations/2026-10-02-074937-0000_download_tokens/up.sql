@@ -1,7 +1,7 @@
 CREATE TABLE object_download_tokens (
     token UUID PRIMARY KEY,
     object_id UUID NOT NULL,
-    used BOOLEAN NOT NULL DEFAULT FALSE,
+    current_step SMALLINT NOT NULL DEFAULT 0,
     expiry TIMESTAMP NOT NULL
 );
 

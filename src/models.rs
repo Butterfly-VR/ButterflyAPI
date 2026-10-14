@@ -258,7 +258,7 @@ pub struct IpInfo {
 pub struct ObjectDownloadToken {
     pub token: Uuid,
     pub object_id: Uuid,
-    pub used: bool,
+    pub current_step: i16,
     pub expiry: SystemTime,
 }
 
