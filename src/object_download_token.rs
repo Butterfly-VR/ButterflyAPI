@@ -170,16 +170,6 @@ pub async fn change_object_server_variant_file(
     };
     let enum_str = enum_str.to_owned() + "-server";
 
-    diesel::update(objects::table)
-        .filter(objects::id.eq(&object.id))
-        .filter(objects::object_type.eq(object.object_type))
-        .set((
-            objects::verified.eq(false),
-            objects::updated_at.eq(SystemTime::now()),
-        ))
-        .execute(&mut conn)
-        .await?;
-
     upload_object_stream(
         &state.s3_client,
         &enum_str,
