@@ -5,7 +5,7 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Router, http, routing::get};
-use bb8::Pool;
+use bb8::{Pool, QueueStrategy};
 use chrono::{DateTime, Utc};
 use diesel::QueryDsl;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
@@ -153,12 +153,15 @@ async fn main() {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let pool = Pool::builder()
+        .connection_timeout(Duration::from_secs(3))
+        .min_idle(1)
+        .queue_strategy(QueueStrategy::Lifo)
         .build(AsyncDieselConnectionManager::new(database_url))
         .await
         .expect("failed to connect to the database");
     let s3_client = aws_sdk_s3::Client::new(&aws_config::load_from_env().await);
 
-    if args().find(|arg| arg == "--run_jobs").is_some() {
+    if args().any(|arg| arg == "--run_jobs") {
         jobs::run_all_jobs(pool, s3_client).await;
         return;
     }
