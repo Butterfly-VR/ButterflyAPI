@@ -1,6 +1,6 @@
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 use uuid::Uuid;
 
 use crate::schema::*;
@@ -125,8 +125,8 @@ pub struct Object {
     pub name: String,
     pub description: String,
     pub flags: Vec<Option<bool>>,
-    pub updated_at: SystemTime,
-    pub created_at: SystemTime,
+    pub updated_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     pub verified: bool,
     pub object_size: i64,
     pub image_size: i64,
@@ -138,7 +138,7 @@ pub struct Object {
     pub license: Uuid,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
-    pub delete_at: Option<SystemTime>,
+    pub delete_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Queryable, Selectable, Insertable, Serialize)]
@@ -159,7 +159,7 @@ pub struct User {
     pub avatar: Option<Uuid>,
     pub instance: Option<Uuid>,
     pub identifier: Option<Vec<u8>>,
-    pub delete_at: Option<SystemTime>,
+    pub delete_at: Option<DateTime<Utc>>,
     pub can_login: bool,
     pub upload_quota_used: i64,
     pub download_quota_used: i64,
@@ -176,7 +176,7 @@ pub struct UnverifiedUser {
     pub salt: Vec<u8>,
     pub email: String,
     pub token: Vec<u8>,
-    pub expires: SystemTime,
+    pub expires: DateTime<Utc>,
 }
 
 #[derive(Serialize, Queryable, Selectable, Debug)]
@@ -209,7 +209,7 @@ pub struct Token {
     pub user: Uuid,
     pub token: Vec<u8>,
     pub renewable: bool,
-    pub expires: SystemTime,
+    pub expires: DateTime<Utc>,
 }
 
 #[derive(Queryable, Selectable, Insertable)]
@@ -248,9 +248,9 @@ pub struct Instance {
 pub struct IpInfo {
     pub ip: ipnet::IpNet,
     pub accounts_created: i16,
-    pub account_creation_count_reset: SystemTime,
+    pub account_creation_count_reset: DateTime<Utc>,
     pub login_attempts: i16,
-    pub login_attempts_reset: SystemTime,
+    pub login_attempts_reset: DateTime<Utc>,
 }
 
 #[derive(Queryable, Selectable, Insertable)]
@@ -259,7 +259,7 @@ pub struct ObjectDownloadToken {
     pub token: Uuid,
     pub object_id: Uuid,
     pub current_step: i16,
-    pub expiry: SystemTime,
+    pub expiry: DateTime<Utc>,
 }
 
 #[derive(Queryable, Selectable, Insertable, Associations)]
@@ -270,6 +270,6 @@ pub struct Moderation {
     pub target: Uuid,
     pub moderator: Option<Uuid>,
     pub type_: i16,
-    pub expires: Option<SystemTime>,
+    pub expires: Option<DateTime<Utc>>,
     pub details: Option<String>,
 }

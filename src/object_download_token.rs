@@ -13,13 +13,13 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{Json, Router, routing::get};
+use chrono::Utc;
 use diesel::prelude::*;
 use diesel::update;
 use diesel_async::RunQueryDsl;
 use futures_util::TryStreamExt;
 use serde::Serialize;
 use std::sync::Arc;
-use std::time::SystemTime;
 use uuid::Uuid;
 
 const TOKEN_STAGE1_PATH: &str = "/token_details/{token}";
@@ -47,7 +47,7 @@ pub async fn get_object_info_from_token(
         .inner_join(objects::table)
         .select(Object::as_select())
         .filter(object_download_tokens::token.eq(token))
-        .filter(object_download_tokens::expiry.gt(SystemTime::now()))
+        .filter(object_download_tokens::expiry.gt(Utc::now()))
         .filter(object_download_tokens::current_step.eq(0))
         .first(&mut conn)
         .await
@@ -91,7 +91,7 @@ pub async fn get_object_from_token(
         .inner_join(objects::table)
         .select(Object::as_select())
         .filter(object_download_tokens::token.eq(token))
-        .filter(object_download_tokens::expiry.gt(SystemTime::now()))
+        .filter(object_download_tokens::expiry.gt(Utc::now()))
         .filter(object_download_tokens::current_step.eq(1))
         .first(&mut conn)
         .await
@@ -139,7 +139,7 @@ pub async fn change_object_server_variant_file(
         .inner_join(objects::table)
         .select(Object::as_select())
         .filter(object_download_tokens::token.eq(token))
-        .filter(object_download_tokens::expiry.gt(SystemTime::now()))
+        .filter(object_download_tokens::expiry.gt(Utc::now()))
         .filter(object_download_tokens::current_step.eq(2))
         .first(&mut conn)
         .await

@@ -6,6 +6,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Router, http, routing::get};
 use bb8::Pool;
+use chrono::{DateTime, Utc};
 use diesel::QueryDsl;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
@@ -19,7 +20,7 @@ use std::hint::black_box;
 use std::net::SocketAddr;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use std::{env, sync::Arc};
 use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
@@ -113,12 +114,12 @@ struct AppState {
     object_cache: moka::future::Cache<Uuid, CacheEntry>,
     image_cache: moka::future::Cache<Uuid, CacheEntry>,
     server_variant_cache: moka::future::Cache<Uuid, CacheEntry>,
-    last_health_check: RwLock<SystemTime>,
+    last_health_check: RwLock<Instant>,
 }
 
 #[derive(Debug, Clone)]
 pub struct CacheEntry {
-    cached_at: SystemTime,
+    cached_at: DateTime<Utc>,
     size_kb: u32,
     file: Arc<fs::File>,
 }
@@ -194,7 +195,7 @@ async fn main() {
                 v.size_kb.min((SERVER_VARIANT_CACHE_SIZE_KB / 1000) as u32)
             })
             .build(),
-        last_health_check: RwLock::new(SystemTime::now()),
+        last_health_check: RwLock::new(Instant::now()),
     });
 
     let health_check_state = app_state.clone();
@@ -205,14 +206,12 @@ async fn main() {
             HEALTH_CHECK_ORIGIN,
             get(async move || {
                 // endpoint is public so we need to avoid spamming health checks
-                if SystemTime::now()
-                    .duration_since(*health_check_state.last_health_check.read().await)
-                    .unwrap_or_default()
+                if Instant::now().duration_since(*health_check_state.last_health_check.read().await)
                     < HEALTH_CHECK_INTERVAL
                 {
                     return http::StatusCode::OK;
                 }
-                *health_check_state.last_health_check.write().await = SystemTime::now();
+                *health_check_state.last_health_check.write().await = Instant::now();
 
                 // check the database connection and clients
                 let _ = black_box(

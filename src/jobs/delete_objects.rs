@@ -1,6 +1,5 @@
-use std::time::SystemTime;
-
 use bb8::PooledConnection;
+use chrono::Utc;
 use diesel::{ExpressionMethods, delete};
 use diesel_async::{
     AsyncPgConnection, RunQueryDsl, pooled_connection::AsyncDieselConnectionManager,
@@ -16,7 +15,7 @@ pub async fn run_delete_objects(
     const OBJECT_IMAGE_SUFFIX: &str = "-images";
 
     let object_list: Vec<(i16, Uuid)> = delete(objects::table)
-        .filter(objects::delete_at.le(SystemTime::now()))
+        .filter(objects::delete_at.le(Utc::now()))
         .returning((objects::object_type, objects::id))
         .get_results::<(i16, Uuid)>(conn)
         .await

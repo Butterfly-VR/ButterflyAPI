@@ -18,7 +18,6 @@ use diesel_async::RunQueryDsl;
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
-use std::time::UNIX_EPOCH;
 use uuid::Uuid;
 
 const INSTANCE_API_ROUTE: &str = "/internal";
@@ -114,16 +113,8 @@ pub async fn get_object(
             .iter()
             .map(|x| x.unwrap_or(false))
             .collect::<Vec<bool>>(),
-        updated_at: object
-            .updated_at
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
-        created_at: object
-            .created_at
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
+        updated_at: object.updated_at.timestamp().unsigned_abs(), // should never be before the epoch
+        created_at: object.created_at.timestamp().unsigned_abs(),
         object_size: object.object_size,
         image_size: object.image_size,
         creator: object.creator,

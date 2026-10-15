@@ -20,6 +20,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get};
+use chrono::DateTime;
+use chrono::Utc;
 use diesel::dsl::sql;
 use diesel::insert_into;
 use diesel::prelude::*;
@@ -32,8 +34,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::spawn;
@@ -129,7 +129,7 @@ pub async fn create_or_update_object(
                 new_object.encryption_key = json.encryption_key;
                 new_object.encryption_iv = json.encryption_iv;
 
-                new_object.updated_at = SystemTime::now();
+                new_object.updated_at = Utc::now();
 
                 if let Some(license_number) = licenses::table
                     .select(licenses::id)
@@ -236,8 +236,8 @@ pub async fn create_or_update_object(
                     name: json.name,
                     description: json.description,
                     flags: json.flags.into_iter().map(Some).collect(),
-                    updated_at: SystemTime::now(),
-                    created_at: SystemTime::now(),
+                    updated_at: Utc::now(),
+                    created_at: Utc::now(),
                     verified: false,
                     object_size: 0,
                     image_size: 0,
@@ -322,16 +322,8 @@ pub async fn get_object_info(
                 .iter()
                 .map(|x| x.unwrap_or(false))
                 .collect::<Vec<bool>>(),
-            updated_at: object
-                .updated_at
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            created_at: object
-                .created_at
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            updated_at: object.updated_at.timestamp().unsigned_abs(),
+            created_at: object.created_at.timestamp().unsigned_abs(),
             object_size: object.object_size,
             image_size: object.image_size,
             creator: object.creator,
@@ -364,7 +356,7 @@ pub async fn get_object_file(
         if objects::table
             .select(objects::updated_at)
             .find(object_id)
-            .first::<SystemTime>(&mut conn)
+            .first::<DateTime<Utc>>(&mut conn)
             .await
             .map(|updated_at| updated_at < cache_entry.cached_at)?
         {
@@ -437,7 +429,7 @@ pub async fn change_object_file(
             .filter(objects::object_type.eq(object_type as i16))
             .set((
                 objects::verified.eq(false),
-                objects::updated_at.eq(SystemTime::now()),
+                objects::updated_at.eq(Utc::now()),
             ))
             .execute(&mut conn)
             .await?;
@@ -519,7 +511,7 @@ pub async fn get_object_server_variant_file(
         if objects::table
             .select(objects::updated_at)
             .find(object_id)
-            .first::<SystemTime>(&mut conn)
+            .first::<DateTime<Utc>>(&mut conn)
             .await
             .map(|updated_at| updated_at < cache_entry.cached_at)?
         {
@@ -568,7 +560,7 @@ pub async fn get_object_image(
         if objects::table
             .select(objects::updated_at)
             .find(object_id)
-            .first::<SystemTime>(&mut conn)
+            .first::<DateTime<Utc>>(&mut conn)
             .await
             .map(|updated_at| updated_at < cache_entry.cached_at)?
         {
@@ -642,7 +634,7 @@ pub async fn change_object_image(
             .filter(objects::object_type.eq(object_type as i16))
             .set((
                 objects::verified.eq(false),
-                objects::updated_at.eq(SystemTime::now()),
+                objects::updated_at.eq(Utc::now()),
             ))
             .execute(&mut conn)
             .await?;
@@ -918,8 +910,8 @@ pub async fn delete_object(
             update(objects::table)
                 .filter(objects::id.eq(&object_id))
                 .set((
-                    objects::delete_at.eq(SystemTime::now() + DELETION_GRACE_PERIOD),
-                    objects::updated_at.eq(SystemTime::now()),
+                    objects::delete_at.eq(Utc::now() + DELETION_GRACE_PERIOD),
+                    objects::updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)
                 .await?;

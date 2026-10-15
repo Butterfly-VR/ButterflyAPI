@@ -7,12 +7,13 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use chrono::Utc;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use schema::tokens::dsl::{expires, token, tokens, user};
+use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::time::Instant;
-use std::{sync::Arc, time::SystemTime};
 use tracing::{debug, trace};
 use uuid::Uuid;
 
@@ -34,7 +35,7 @@ pub async fn check_auth(
     if let Ok(Some(user_id)) = tokens
         .select(user)
         .filter(token.eq(&header_token))
-        .filter(expires.gt(SystemTime::now()))
+        .filter(expires.gt(Utc::now()))
         .first::<Uuid>(&mut conn)
         .await
         .optional()

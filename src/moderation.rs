@@ -18,6 +18,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
+use chrono::DateTime;
+use chrono::Utc;
 use diesel::delete;
 use diesel::insert_into;
 use diesel::prelude::*;
@@ -27,7 +29,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
-use std::time::SystemTime;
 use tower::ServiceBuilder;
 use uuid::Uuid;
 
@@ -189,7 +190,7 @@ pub async fn moderate_object(
         ObjectActions::Remove => {
             update(objects::table)
                 .filter(objects::id.eq(request.target))
-                .set(objects::delete_at.eq(SystemTime::now()))
+                .set(objects::delete_at.eq(Utc::now()))
                 .execute(&mut conn)
                 .await?;
             Ok(())
@@ -235,7 +236,7 @@ pub async fn moderate_user(
                     type_: request.moderation_type as i16,
                     expires: request
                         .expiry_utc
-                        .map(|t| SystemTime::UNIX_EPOCH + Duration::from_secs(t as u64)),
+                        .and_then(|x| DateTime::from_timestamp_secs(x as i64)),
                     details: request.reason,
                 })
                 .execute(&mut conn)
@@ -286,7 +287,7 @@ pub async fn aquire_object_token(
             token: id,
             object_id: object_id,
             current_step: 0,
-            expiry: SystemTime::now() + TOKEN_EXPIRY,
+            expiry: Utc::now() + TOKEN_EXPIRY,
         })
         .execute(&mut conn)
         .await?;

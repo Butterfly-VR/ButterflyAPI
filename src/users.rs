@@ -20,6 +20,8 @@ use axum::http::StatusCode;
 use axum::middleware;
 use axum::response::IntoResponse;
 use axum::{Json, Router, routing::get, routing::post};
+use chrono::DateTime;
+use chrono::Utc;
 use diesel::insert_into;
 use diesel::prelude::*;
 use diesel::update;
@@ -32,7 +34,6 @@ use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::time::SystemTime;
 use uuid::Uuid;
 
 const USERS_ROUTE: &str = "/user";
@@ -91,16 +92,16 @@ pub async fn sign_up(
                     ip_infos::accounts_created,
                     ip_infos::account_creation_count_reset,
                 ))
-                .get_result::<(i16, SystemTime)>(&mut conn)
+                .get_result::<(i16, DateTime<Utc>)>(&mut conn)
                 .await
                 .optional()?
             {
-                if ip_info.1 < SystemTime::now() {
+                if ip_info.1 < Utc::now() {
                     update(ip_infos::table.filter(ip_infos::ip.eq(ip)))
                         .set((
                             ip_infos::accounts_created.eq(0),
                             ip_infos::account_creation_count_reset
-                                .eq(SystemTime::now() + ACCOUNT_CREATION_LIMIT_RESET_DURATION),
+                                .eq(Utc::now() + ACCOUNT_CREATION_LIMIT_RESET_DURATION),
                         ))
                         .execute(&mut conn)
                         .await?;
@@ -113,10 +114,10 @@ pub async fn sign_up(
                 let entry = IpInfo {
                     ip,
                     accounts_created: 1,
-                    account_creation_count_reset: SystemTime::now()
+                    account_creation_count_reset: Utc::now()
                         + ACCOUNT_CREATION_LIMIT_RESET_DURATION,
                     login_attempts: 0,
-                    login_attempts_reset: SystemTime::now(),
+                    login_attempts_reset: Utc::now(),
                 };
                 insert_into(ip_infos::table)
                     .values(entry)
@@ -178,7 +179,7 @@ pub async fn sign_up(
                 salt: Vec::from(password_salt),
                 email: json.email,
                 token: Vec::from(token),
-                expires: SystemTime::now() + Duration::from_mins(15),
+                expires: Utc::now() + Duration::from_mins(15),
             };
 
             insert_into(unverified_users::table)
@@ -262,7 +263,7 @@ pub async fn verify_email(
             .await
             .optional()?
         {
-            if user.token == token && user.expires > SystemTime::now() {
+            if user.token == token && user.expires > Utc::now() {
                 let new_user: User = User {
                     id: user.id,
                     username: user.username,

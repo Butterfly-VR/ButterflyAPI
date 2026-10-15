@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use chrono::Utc;
 use futures_util::Stream;
 use moka::future::Cache;
 use std::{
@@ -7,7 +8,6 @@ use std::{
     os::unix::fs::FileExt,
     sync::Arc,
     thread::JoinHandle,
-    time::SystemTime,
 };
 use tokio::{
     sync::mpsc::{Receiver, Sender, channel},
@@ -90,7 +90,7 @@ pub async fn cache_object(
         .insert(
             object_id,
             CacheEntry {
-                cached_at: SystemTime::now(),
+                cached_at: Utc::now(),
                 size_kb: file.stream_position().unwrap() as u32 / 1024,
                 file: Arc::new(file),
             },

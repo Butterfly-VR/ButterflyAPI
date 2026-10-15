@@ -19,6 +19,8 @@ use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::{Json, Router, routing::get, routing::post};
+use chrono::DateTime;
+use chrono::Utc;
 use diesel::delete;
 use diesel::insert_into;
 use diesel::prelude::*;
@@ -32,8 +34,6 @@ use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::time::SystemTime;
-use time::OffsetDateTime;
 use tokio::time::Instant;
 use tokio::time::sleep;
 use tracing::trace;
@@ -65,11 +65,7 @@ impl From<Token> for SignInResponse {
     fn from(value: Token) -> Self {
         Self {
             token: value.token,
-            token_expires: value
-                .expires
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            token_expires: value.expires.timestamp().unsigned_abs(),
             renewable: value.renewable,
         }
     }
@@ -112,16 +108,16 @@ pub async fn sign_in(
         let ip = IpNet::new(IpAddr::from_str(ip.to_str()?)?, 32)?;
 
         if let Some(ip_info) = ip_infos::table.select((ip_infos::login_attempts, ip_infos::login_attempts_reset)).filter(ip_infos::ip.eq(ip))
-            .first::<(i16, SystemTime)>(&mut conn)
+            .first::<(i16, DateTime<Utc>)>(&mut conn)
             .await
             .optional()?
         {
-            if ip_info.1 < SystemTime::now() {
+            if ip_info.1 < Utc::now() {
                 update(ip_infos::table.filter(ip_infos::ip.eq(ip)))
                     .set((
                         ip_infos::login_attempts.eq(0),
                         ip_infos::login_attempts_reset
-                            .eq(SystemTime::now() + LOGIN_ATTEMPT_LIMIT_RESET_DURATION),
+                            .eq(Utc::now() + LOGIN_ATTEMPT_LIMIT_RESET_DURATION),
                     ))
                     .execute(&mut conn)
                     .await?;
@@ -132,9 +128,9 @@ pub async fn sign_in(
             let entry = IpInfo {
                 ip,
                 accounts_created: 0,
-                account_creation_count_reset: SystemTime::now(),
+                account_creation_count_reset: Utc::now(),
                 login_attempts: 0,
-                login_attempts_reset: SystemTime::now() + LOGIN_ATTEMPT_LIMIT_RESET_DURATION,
+                login_attempts_reset: Utc::now() + LOGIN_ATTEMPT_LIMIT_RESET_DURATION,
             };
             insert_into(ip_infos::table)
                 .values(entry)
@@ -145,13 +141,13 @@ pub async fn sign_in(
         let moderations = moderations::table.inner_join(users.on(moderations::target.eq(id)))
             .select(Moderation::as_select())
             .filter(email.eq(&json.email)).filter(
-                moderations::expires.gt(SystemTime::now()).or(moderations::expires.is_null()))
+                moderations::expires.gt(Utc::now()).or(moderations::expires.is_null()))
             .load(&mut conn)
             .await?;
 
         if let Some(x) = moderations.into_iter().find(|x| x.type_ == moderation::UserModerationType::Ban as i16) {
             let expire_string = match x.expires {
-                Some(expires) => format!(" (expires: {})", OffsetDateTime::from(expires).date().to_string()),
+                Some(expires) => format!(" (expires: {})", expires.date_naive().to_string()),
                 None => "".to_string(),
             };
 
@@ -190,7 +186,7 @@ pub async fn sign_in(
                     user: u.id,
                     token: t,
                     renewable: json.allow_renew,
-                    expires: SystemTime::now() + NEW_TOKEN_EXPIRY,
+                    expires: Utc::now() + NEW_TOKEN_EXPIRY,
                 };
 
                 insert_into(tokens)
@@ -241,7 +237,7 @@ pub async fn renew(
         .inner_join(users.on(moderations::target.eq(id)))
         .select(Moderation::as_select())
         .filter(id.eq(user_id))
-        .filter(moderations::expires.lt(SystemTime::now()))
+        .filter(moderations::expires.lt(Utc::now()))
         .load(&mut conn)
         .await?;
 
@@ -279,7 +275,7 @@ pub async fn renew(
         user: user_id,
         token: t,
         renewable: true,
-        expires: SystemTime::now() + NEW_TOKEN_EXPIRY,
+        expires: Utc::now() + NEW_TOKEN_EXPIRY,
     };
 
     insert_into(tokens)
