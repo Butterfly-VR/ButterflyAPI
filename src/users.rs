@@ -280,6 +280,9 @@ pub async fn verify_email(
                     can_login: true,
                     upload_quota_used: 0,
                     download_quota_used: 0,
+                    status: 0,
+                    profile_dark_mode: false,
+                    profile_style: 0,
                 };
                 insert_into(users::table)
                     .values(new_user)

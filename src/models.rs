@@ -163,6 +163,9 @@ pub struct User {
     pub can_login: bool,
     pub upload_quota_used: i64,
     pub download_quota_used: i64,
+    pub status: i16,
+    pub profile_dark_mode: bool,
+    pub profile_style: i16,
 }
 
 #[derive(Queryable, Selectable, Insertable, Serialize)]

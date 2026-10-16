@@ -12,6 +12,7 @@ pub async fn run_delete_objects(
     s3_client: aws_sdk_s3::Client,
 ) {
     const OBJECT_IMAGE_SUFFIX: &str = "-images";
+    const SERVER_VARIANT_SUFFIX: &str = "-server";
 
     let object_list: Vec<(i16, Uuid)> = delete(objects::table)
         .filter(objects::delete_at.le(diesel::dsl::now))
@@ -33,13 +34,26 @@ pub async fn run_delete_objects(
             .await
             .unwrap();
 
-        let bucket = bucket.to_string() + OBJECT_IMAGE_SUFFIX;
-        s3_client
-            .delete_object()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await
-            .unwrap();
+        {
+            let bucket = bucket.to_string() + OBJECT_IMAGE_SUFFIX;
+            s3_client
+                .delete_object()
+                .bucket(bucket)
+                .key(key)
+                .send()
+                .await
+                .unwrap();
+        }
+
+        {
+            let bucket = bucket.to_string() + SERVER_VARIANT_SUFFIX;
+            s3_client
+                .delete_object()
+                .bucket(bucket)
+                .key(key)
+                .send()
+                .await
+                .unwrap();
+        }
     }
 }

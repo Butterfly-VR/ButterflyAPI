@@ -80,6 +80,7 @@ CREATE TABLE "users" (
 	"download_quota_used" BIGINT NOT NULL,
 	"bio" VARCHAR(4096),
 	"status" SMALLINT NOT NULL,
+	"last_status_ping" TIMESTAMPTZ NOT NULL DEFAULT now(),
 	"status_message" VARCHAR(32),
 	"pronouns" VARCHAR(32),
 	"profile_main_colour" VARCHAR(6), -- RGB hex color "RRGGBB"
