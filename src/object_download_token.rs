@@ -7,6 +7,7 @@ use crate::models::ObjectType;
 use crate::objects::upload_object_stream;
 use crate::schema::object_download_tokens;
 use crate::schema::objects;
+use crate::schema::users;
 use axum::body::Body;
 use axum::extract::Path;
 use axum::extract::State;
@@ -31,7 +32,7 @@ pub struct ObjectInfo {
     pub id: Uuid,
     pub name: String,
     pub verified: bool,
-    pub creator: Uuid,
+    pub creator: String,
     pub object_type: i16,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
@@ -43,9 +44,9 @@ pub async fn get_object_info_from_token(
 ) -> Result<Json<ObjectInfo>, ApiError> {
     let mut conn = state.pool.get().await?;
 
-    let Some(object) = object_download_tokens::table
-        .inner_join(objects::table)
-        .select(Object::as_select())
+    let Some((object, creator)) = object_download_tokens::table
+        .inner_join(objects::table.inner_join(users::table.on(users::id.eq(objects::creator))))
+        .select((Object::as_select(), users::username))
         .filter(object_download_tokens::token.eq(token))
         .filter(object_download_tokens::expiry.gt(Utc::now()))
         .filter(object_download_tokens::current_step.eq(0))
@@ -66,7 +67,7 @@ pub async fn get_object_info_from_token(
         id: object.id,
         name: object.name,
         verified: object.verified,
-        creator: object.creator,
+        creator: creator,
         object_type: object.object_type,
         encryption_key: object.encryption_key,
         encryption_iv: object.encryption_iv,
