@@ -44,7 +44,8 @@ const OBJECT_DOWNLOAD_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/epck"
 const OBJECT_SERVER_VARIANT_DOWNLOAD_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/server");
 const OBJECT_IMAGE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/image");
 const OBJECT_DELETE_ROUTE: &str = constcat::concat!(OBJECT_INFO_ROUTE, "/delete");
-const MAX_TOTAL_UPLOADED_KB: usize = 1024 * 1024 * 5;
+const MAX_TOTAL_UPLOADED_KB: usize = 1024 * 1024;
+const MAX_OBJECT_SIZE_KB: usize = 1024 * 1024;
 const MAX_OBJECTS_PER_USER: i64 = 100;
 
 #[derive(Deserialize)]
@@ -465,7 +466,7 @@ pub async fn change_object_file(
             &mut tokio_util::io::StreamReader::new(stream.map_err(|_| {
                 std::io::Error::new(std::io::ErrorKind::NotFound, "no error handling here")
             })),
-            MAX_TOTAL_UPLOADED_KB - total_uploaded_kb as usize,
+            (MAX_TOTAL_UPLOADED_KB - total_uploaded_kb as usize).min(MAX_OBJECT_SIZE_KB),
         )
         .await?;
 
@@ -670,7 +671,7 @@ pub async fn change_object_image(
             &mut tokio_util::io::StreamReader::new(stream.map_err(|_| {
                 std::io::Error::new(std::io::ErrorKind::NotFound, "no error handling here")
             })),
-            MAX_TOTAL_UPLOADED_KB - total_uploaded_kb as usize,
+            (MAX_TOTAL_UPLOADED_KB - total_uploaded_kb as usize).min(MAX_OBJECT_SIZE_KB),
         )
         .await?;
 
@@ -708,7 +709,7 @@ pub async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     bucket: &str,
     key: &str,
     stream: &mut S,
-    available_space_kb: usize,
+    max_object_size: usize,
 ) -> Result<(), ApiError> {
     // 10MB
     const CHUNK_SIZE: usize = 10 * 1024 * 1024;
@@ -732,14 +733,14 @@ pub async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
     first_chunk.truncate(total_read_size);
 
     if first_chunk.len() < MAX_PUT_SIZE {
-        if first_chunk.len() / 1024 > available_space_kb {
+        if first_chunk.len() / 1024 > max_object_size {
             return Err(ApiError::WithResponse(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorInfo {
                     error_code: ErrorCode::InsufficientSpace,
                     error_message: Some(format!(
                         "Not enough space: {} kb available, {} kb required",
-                        available_space_kb,
+                        max_object_size,
                         first_chunk.len() / 1024
                     )),
                 }),
@@ -812,7 +813,7 @@ pub async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
         chunk.resize(total_read_size, 0);
         object_size += total_read_size;
 
-        if object_size / 1024 > available_space_kb {
+        if object_size / 1024 > max_object_size {
             client
                 .abort_multipart_upload()
                 .bucket(bucket)
@@ -826,7 +827,7 @@ pub async fn upload_object_stream<S: AsyncRead + Unpin + Send>(
                     error_code: ErrorCode::InsufficientSpace,
                     error_message: Some(format!(
                         "Not enough space: {} kb available, {} kb required",
-                        available_space_kb,
+                        max_object_size,
                         object_size / 1024
                     )),
                 }),
