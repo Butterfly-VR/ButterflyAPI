@@ -208,6 +208,7 @@ pub async fn moderate_object(
 
 #[derive(Deserialize)]
 pub enum UserModerationType {
+    Warn,
     Ban,
 }
 
@@ -227,6 +228,19 @@ pub async fn moderate_user(
     let mut conn = app_state.pool.get().await?;
 
     match request.moderation_type {
+        UserModerationType::Warn => {
+            insert_into(moderations::table)
+                .values(Moderation {
+                    id: Uuid::new_v4(),
+                    target: request.target,
+                    moderator: Some(user_id),
+                    type_: request.moderation_type as i16,
+                    expires: None,
+                    details: request.reason,
+                })
+                .execute(&mut conn)
+                .await?;
+        }
         UserModerationType::Ban => {
             insert_into(moderations::table)
                 .values(Moderation {
@@ -245,9 +259,9 @@ pub async fn moderate_user(
                 .filter(tokens::user.eq(request.target))
                 .execute(&mut conn)
                 .await?;
-            Ok(())
         }
     }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize)]
