@@ -145,9 +145,10 @@ pub async fn sign_in(
             .load(&mut conn)
             .await?;
 
+        // todo: should probably only include this response if the password is correct
         if let Some(x) = moderations.into_iter().find(|x| x.type_ == moderation::UserModerationType::Ban as i16) {
             let expire_string = match x.expires {
-                Some(expires) => format!(" (expires: {})", expires.date_naive().to_string()),
+                Some(expires) => format!("(expires: {})", expires.date_naive().to_string()),
                 None => "".to_string(),
             };
 
@@ -155,7 +156,7 @@ pub async fn sign_in(
                 error_code: ErrorCode::Banned,
                 error_message: Some(
                     format!(
-                        "You have been banned for the following reason{}: {}",
+                        "You have been banned for the following reason {}: {}",
                         expire_string,
                         x.details.unwrap_or_default())),
             })));

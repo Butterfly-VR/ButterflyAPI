@@ -2,7 +2,7 @@ use crate::ApiError;
 use lettre::{
     Address, Message, SmtpTransport, Transport,
     message::{Mailbox, MessageBuilder},
-    transport::smtp::authentication::Credentials,
+    transport::smtp::authentication::{Credentials, Mechanism},
 };
 use std::env;
 use tokio::task::spawn_blocking;
@@ -65,8 +65,10 @@ pub async fn send_email(
             email: email.parse()?,
         })
         .from(Mailbox {
-            name: Some("ButterflyVR".to_owned()),
-            email: Address::new("support", "butterflyvr.net")?,
+            name: Some("ButterflyVR Support".to_owned()),
+            email: env::var("MAIL_EMAIL")
+                .expect("MAIL_EMAIL must be set")
+                .parse::<Address>()?,
         });
 
     let email: Message = match email_type {
@@ -96,12 +98,13 @@ pub async fn send_email(
     };
 
     spawn_blocking(move || {
-        let mailer = SmtpTransport::starttls_relay("smtp.protonmail.ch")
+        let mailer = SmtpTransport::relay("ssl0.ovh.net")
             .unwrap()
             .credentials(Credentials::new(
                 env::var("MAIL_EMAIL").expect("MAIL_EMAIL must be set"),
                 env::var("MAIL_TOKEN").expect("MAIL_TOKEN must be set"),
             ))
+            .authentication(vec![Mechanism::Login])
             .build();
         mailer.send(&email)
     })
