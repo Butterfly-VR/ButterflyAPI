@@ -90,6 +90,7 @@ pub async fn send_email(
                 ",
                 username,
                 format_args!(
+                    // todo: set this to v1 when api is stable
                     "https://butterflyvr.net/api/v0/user/{}/verify/{}",
                     user_id,
                     hex::encode(token)
