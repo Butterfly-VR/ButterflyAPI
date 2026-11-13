@@ -106,7 +106,6 @@ pub async fn search(
     Path(query): Path<String>,
     Extension(user): Extension<Uuid>,
 ) -> Result<Json<SearchResult>, ApiError> {
-    // todo: replace unwraps with error handling
     let (term, filters) = query
         .split_once('&')
         .ok_or(ApiError::WithCode(StatusCode::BAD_REQUEST))?;
@@ -204,7 +203,7 @@ pub async fn search_objects(
     query
         .load::<(Uuid, String)>(conn)
         .await
-        .unwrap()
+        .unwrap_or_default()
         .into_iter()
         .map(ShortObject::from)
         .collect()
@@ -232,7 +231,7 @@ pub async fn search_users(
             _ => {}
         }
     }
-    query.load(conn).await.unwrap()
+    query.load(conn).await.unwrap_or_default()
 }
 
 pub fn search_router(app_state: Arc<AppState>) -> Router {

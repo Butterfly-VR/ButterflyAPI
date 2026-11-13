@@ -244,39 +244,38 @@ pub async fn join_instance(
     let mut conn = state.pool.get().await?;
 
     conn.transaction(async |mut conn| {
-        {
-            let Some(instance) = instances::table
-                .select(Instance::as_select())
-                .for_no_key_update()
-                .filter(instances::id.eq(id))
-                .first(&mut conn)
-                .await
-                .optional()?
-            else {
-                return Ok::<Result<InstanceJoinInfo, ApiError>, ApiError>(Err(
-                    ApiError::WithCode(StatusCode::NOT_FOUND),
-                ));
-            };
+        let Some(instance) = instances::table
+            .select(Instance::as_select())
+            .for_no_key_update()
+            .filter(instances::id.eq(id))
+            // todo: check other publicity types once friends / invites are implemented
+            // would also need to track instance creator
+            .filter(instances::publicity.eq(InstancePublicity::Public as i16))
+            .first(&mut conn)
+            .await
+            .optional()?
+        else {
+            return Ok::<Result<InstanceJoinInfo, ApiError>, ApiError>(Err(ApiError::WithCode(
+                StatusCode::NOT_FOUND,
+            )));
+        };
 
-            // todo: check for instance privacy, blocks, etc
+        let mut identifier = [0u8; 8];
+        SysRng.try_fill_bytes(&mut identifier)?;
 
-            let mut identifier = [0u8; 8];
-            SysRng.try_fill_bytes(&mut identifier)?;
+        diesel::update(users::table.find(user_id))
+            .set((
+                users::instance.eq(instance.id),
+                users::identifier.eq(identifier),
+            ))
+            .execute(&mut conn)
+            .await?;
 
-            diesel::update(users::table.find(user_id))
-                .set((
-                    users::instance.eq(instance.id),
-                    users::identifier.eq(identifier),
-                ))
-                .execute(&mut conn)
-                .await?;
-
-            Ok(Ok(InstanceJoinInfo {
-                ip: instance.ip.to_string(),
-                port: instance.port as u16,
-                identifier: identifier.to_vec(),
-            }))
-        }
+        Ok(Ok(InstanceJoinInfo {
+            ip: instance.ip.to_string(),
+            port: instance.port as u16,
+            identifier: identifier.to_vec(),
+        }))
     })
     .await?
     .map(Json)

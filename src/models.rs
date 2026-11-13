@@ -230,6 +230,8 @@ pub struct Tag {
     pub tag: String,
 }
 
+// todo: track instance creator to handle friends only publicity correctly
+// todo: what happens when instance creator leaves?
 #[derive(Queryable, Selectable, Associations, Insertable)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 #[diesel(belongs_to(Object, foreign_key = world))]

@@ -145,23 +145,6 @@ pub async fn sign_in(
             .load(&mut conn)
             .await?;
 
-        // todo: should probably only include this response if the password is correct
-        if let Some(x) = moderations.into_iter().find(|x| x.type_ == moderation::UserModerationType::Ban as i16) {
-            let expire_string = match x.expires {
-                Some(expires) => format!("(expires: {})", expires.date_naive().to_string()),
-                None => "".to_string(),
-            };
-
-            return Err(ApiError::WithResponse(StatusCode::FORBIDDEN, Json(ErrorInfo {
-                error_code: ErrorCode::Banned,
-                error_message: Some(
-                    format!(
-                        "You have been banned for the following reason {}: {}",
-                        expire_string,
-                        x.details.unwrap_or_default())),
-            })));
-        }
-
         // start of 'critical' section (see top of function)
         if let Ok(u) = users
             .select(User::as_select())
@@ -179,6 +162,23 @@ pub async fn sign_in(
             if password_hash.unwrap_or_default() == u.password {
                 // end of 'critical' section (see top of function)
                 // if this code block isnt reached, critical section lasts until the end of the function
+
+                if let Some(x) = moderations.into_iter().find(|x| x.type_ == moderation::UserModerationType::Ban as i16) {
+                    let expire_string = match x.expires {
+                        Some(expires) => format!("(expires: {})", expires.date_naive().to_string()),
+                        None => "".to_string(),
+                    };
+
+                    return Err(ApiError::WithResponse(StatusCode::FORBIDDEN, Json(ErrorInfo {
+                        error_code: ErrorCode::Banned,
+                        error_message: Some(
+                            format!(
+                                "You have been banned for the following reason {}: {}",
+                                expire_string,
+                                x.details.unwrap_or_default())),
+                    })));
+                }
+
                 let mut t = vec![0; 64];
 
                 SysRng.try_fill_bytes(&mut t)?;
