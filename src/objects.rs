@@ -486,6 +486,27 @@ pub async fn change_object_file(
             )
             .execute(&mut conn)
             .await?;
+
+        state.server_variant_cache.invalidate(&object.id).await;
+
+        let enum_str: &'static str = match object
+            .object_type
+            .try_into()
+            .map_err(|_| ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?
+        {
+            ObjectType::World => "worlds",
+            ObjectType::Avatar => "avatars",
+        };
+        let enum_str = enum_str.to_owned() + "-server";
+
+        state
+            .s3_client
+            .delete_object()
+            .bucket(&enum_str)
+            .key(object_id)
+            .send()
+            .await
+            .unwrap();
     } else {
         return Err(ApiError::WithResponse(
             StatusCode::NOT_FOUND,
