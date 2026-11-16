@@ -1,5 +1,84 @@
 CREATE EXTENSION "pg_trgm";
 
+-- Lookup tables (enum values)
+
+CREATE TABLE "object_types" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+INSERT INTO "object_types" ("name") VALUES ('World'), ('Avatar');
+
+CREATE TABLE "permissions_levels" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+INSERT INTO "permissions_levels" ("name") VALUES ('Default'), ('Moderator'), ('Admin');
+
+CREATE TABLE "instance_publicities" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+INSERT INTO "instance_publicities" ("name") VALUES ('InviteOnly'), ('Friends'), ('FriendsOfFriends'), ('Public');
+
+CREATE TABLE "object_publicities" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+INSERT INTO "object_publicities" ("name") VALUES ('Private'), ('Friends'), ('Unlisted'), ('Public');
+
+CREATE TABLE "user_statuses" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+INSERT INTO "user_statuses" ("name") VALUES ('Online'), ('Idle'), ('Busy'), ('DoNotDisturb'), ('Offline');
+
+CREATE TABLE "profile_styles" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+INSERT INTO "profile_styles" ("name") VALUES ('Default');
+
+CREATE TABLE "moderation_types" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+INSERT INTO "moderation_types" ("name") VALUES ('Ban'), ('Warn');
+
+CREATE TABLE "notification_types" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+-- INSERT INTO "notification_types" ("name") VALUES ;
+
+CREATE TABLE "report_target_types" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+INSERT INTO "report_target_types" ("name") VALUES ('User'), ('Object');
+
+CREATE TABLE "report_types" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+-- INSERT INTO "report_types" ("name") VALUES ;
+
+CREATE TABLE "group_publicities" (
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("name")
+);
+
+-- INSERT INTO "group_publicities" ("name") VALUES ;
+
 CREATE TABLE "licenses" (
 	"id" UUID NOT NULL UNIQUE,
 	"text" TEXT NOT NULL UNIQUE,
@@ -19,10 +98,10 @@ CREATE TABLE "objects" (
 	"object_size" BIGINT NOT NULL,
 	"image_size" BIGINT NOT NULL,
 	"creator" UUID NOT NULL, -- FK to users added after users table exists (cyclical w/ homeworld/avatar)
-	"object_type" SMALLINT NOT NULL,
+	"object_type" TEXT NOT NULL REFERENCES "object_types"("name"),
 	"likes" INTEGER NOT NULL,
 	"dislikes" INTEGER NOT NULL,
-	"publicity" SMALLINT NOT NULL,
+	"publicity" TEXT NOT NULL REFERENCES "object_publicities"("name"),
 	"license" UUID NOT NULL REFERENCES "licenses"("id"),
 	"encryption_key" BYTEA NOT NULL,
 	"encryption_iv" BYTEA NOT NULL,
@@ -47,7 +126,7 @@ CREATE TABLE "instances" (
 	"world" UUID NOT NULL REFERENCES "objects"("id") ON DELETE CASCADE,
 	"name" VARCHAR(32) NOT NULL,
 	"max_players" SMALLINT NOT NULL,
-	"publicity" SMALLINT NOT NULL,
+	"publicity" TEXT NOT NULL REFERENCES "instance_publicities"("name"),
 	"anyone_can_invite" BOOLEAN NOT NULL,
 	"is_gameserver" BOOLEAN NOT NULL,
 	"ip" INET NOT NULL,
@@ -67,7 +146,7 @@ CREATE TABLE "users" (
 	"email" VARCHAR(128) NOT NULL UNIQUE,
 	"password" BYTEA NOT NULL,
 	"salt" BYTEA NOT NULL,
-	"permissions_level" SMALLINT NOT NULL,
+	"permissions_level" TEXT NOT NULL REFERENCES "permissions_levels"("name"),
 	"trust" INTEGER NOT NULL,
 	"homeworld" UUID REFERENCES "objects"("id") ON DELETE SET NULL,
 	"avatar" UUID REFERENCES "objects"("id") ON DELETE SET NULL,
@@ -79,14 +158,14 @@ CREATE TABLE "users" (
 	"upload_quota_used" BIGINT NOT NULL,
 	"download_quota_used" BIGINT NOT NULL,
 	"bio" VARCHAR(4096),
-	"status" SMALLINT NOT NULL,
+	"status" TEXT NOT NULL REFERENCES "user_statuses"("name"),
 	"last_status_ping" TIMESTAMPTZ NOT NULL DEFAULT now(),
 	"status_message" VARCHAR(32),
 	"pronouns" VARCHAR(32),
 	"profile_main_colour" VARCHAR(6), -- RGB hex color "RRGGBB"
 	"profile_secondary_colour" VARCHAR(6), -- RGB hex color "RRGGBB"
 	"profile_dark_mode" BOOLEAN NOT NULL DEFAULT false,
-	"profile_style" SMALLINT NOT NULL DEFAULT 0,
+	"profile_style" TEXT NOT NULL REFERENCES "profile_styles"("name"),
 	PRIMARY KEY("id")
 );
 
@@ -128,7 +207,7 @@ CREATE TABLE "moderations" (
 	"id" UUID NOT NULL UNIQUE,
 	"target" UUID NOT NULL REFERENCES "users"("id"),
 	"moderator" UUID REFERENCES "users"("id") ON DELETE SET NULL,
-	"type" SMALLINT NOT NULL,
+	"type" TEXT NOT NULL REFERENCES "moderation_types"("name"),
 	"created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
 	"expires" TIMESTAMPTZ,
 	"details" TEXT,
@@ -143,7 +222,7 @@ CREATE INDEX "moderations_created_at_index" ON "moderations" ("created_at");
 CREATE TABLE "notifications" (
 	"id" UUID NOT NULL UNIQUE,
 	"target" UUID REFERENCES "users"("id") ON DELETE CASCADE,
-	"type" SMALLINT NOT NULL,
+	"type" TEXT NOT NULL REFERENCES "notification_types"("name"),
 	"header" VARCHAR(128),
 	"body" TEXT,
 	"additional_data" JSONB,
@@ -170,8 +249,8 @@ CREATE TABLE "user_reports" (
 	"id" UUID NOT NULL UNIQUE,
 	"reporter" UUID NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
 	"target" UUID NOT NULL,
-	"target_type" SMALLINT NOT NULL,
-	"report_type" SMALLINT NOT NULL,
+	"target_type" TEXT NOT NULL REFERENCES "report_target_types"("name"),
+	"report_type" TEXT NOT NULL REFERENCES "report_types"("name"),
 	"details" VARCHAR(4096) NOT NULL,
 	"additional_data" JSONB,
 	"created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -262,7 +341,7 @@ CREATE TABLE "groups"(
 	"description" VARCHAR(4096) NOT NULL,
 	"created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
 	"creator" UUID NOT NULL,
-	"publicity" SMALLINT NOT NULL,
+	"publicity" TEXT NOT NULL REFERENCES "group_publicities"("name"),
 	"delete_at" TIMESTAMPTZ,
 	PRIMARY KEY("id")
 );
