@@ -1,6 +1,6 @@
 CREATE EXTENSION "pg_trgm";
 
--- Lookup tables (enum values)
+-- Lookup tables
 
 CREATE TABLE "object_types" (
 	"name" TEXT NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE "notification_types" (
 	PRIMARY KEY("name")
 );
 
--- INSERT INTO "notification_types" ("name") VALUES ;
+--INSERT INTO "notification_types" ("name") VALUES ;
 
 CREATE TABLE "report_target_types" (
 	"name" TEXT NOT NULL,
@@ -70,14 +70,16 @@ CREATE TABLE "report_types" (
 	PRIMARY KEY("name")
 );
 
--- INSERT INTO "report_types" ("name") VALUES ;
+--INSERT INTO "report_types" ("name") VALUES ;
 
 CREATE TABLE "group_publicities" (
 	"name" TEXT NOT NULL,
 	PRIMARY KEY("name")
 );
 
--- INSERT INTO "group_publicities" ("name") VALUES ;
+--INSERT INTO "group_publicities" ("name") VALUES ;
+
+-- end of lookup tables
 
 CREATE TABLE "licenses" (
 	"id" UUID NOT NULL UNIQUE,

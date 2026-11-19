@@ -1,109 +1,38 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 use uuid::Uuid;
 
 use crate::schema::*;
 
-#[derive(Deserialize, Clone, Copy)]
+#[derive(Deserialize, PartialEq, Debug, Clone, Copy, EnumString, AsRefStr, IntoStaticStr)]
 pub enum ObjectType {
-    World = 0,
-    Avatar = 1,
+    World,
+    Avatar,
 }
 
-impl From<ObjectType> for &'static str {
-    fn from(value: ObjectType) -> Self {
-        match value {
-            ObjectType::World => "worlds",
-            ObjectType::Avatar => "avatars",
-        }
-    }
-}
-
-impl TryFrom<i16> for ObjectType {
-    type Error = ();
-
-    fn try_from(value: i16) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(ObjectType::World),
-            1 => Ok(ObjectType::Avatar),
-            _ => Err(()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Deserialize, PartialEq, Debug, Clone, Copy, EnumString, AsRefStr, IntoStaticStr)]
 pub enum PermissionsLevel {
-    Default = 0,
-    Moderator = 1,
-    Admin = 2,
+    Default,
+    Moderator,
+    Admin,
 }
 
-impl From<PermissionsLevel> for i16 {
-    fn from(value: PermissionsLevel) -> Self {
-        value as i16
-    }
-}
-
-impl From<i16> for PermissionsLevel {
-    fn from(value: i16) -> Self {
-        match value {
-            0 => PermissionsLevel::Default,
-            1 => PermissionsLevel::Moderator,
-            2 => PermissionsLevel::Admin,
-            _ => PermissionsLevel::Default,
-        }
-    }
-}
-
+#[derive(Deserialize, PartialEq, Debug, Clone, Copy, EnumString, AsRefStr, IntoStaticStr)]
 pub enum InstancePublicity {
-    InviteOnly = 0,
-    Friends = 1,
-    FriendsOfFriends = 2,
-    Public = 3,
+    InviteOnly,
+    Friends,
+    FriendsOfFriends,
+    Public,
 }
 
-impl From<InstancePublicity> for i16 {
-    fn from(value: InstancePublicity) -> Self {
-        value as i16
-    }
-}
-
-impl From<i16> for InstancePublicity {
-    fn from(value: i16) -> Self {
-        match value {
-            0 => InstancePublicity::InviteOnly,
-            1 => InstancePublicity::Friends,
-            2 => InstancePublicity::FriendsOfFriends,
-            3 => InstancePublicity::Public,
-            _ => InstancePublicity::InviteOnly,
-        }
-    }
-}
-
+#[derive(Deserialize, PartialEq, Debug, Clone, Copy, EnumString, AsRefStr, IntoStaticStr)]
 pub enum ObjectPublicity {
-    Private = 0,
-    Friends = 1,
-    Unlisted = 2,
-    Public = 3,
-}
-
-impl From<ObjectPublicity> for i16 {
-    fn from(value: ObjectPublicity) -> Self {
-        value as i16
-    }
-}
-
-impl From<i16> for ObjectPublicity {
-    fn from(value: i16) -> Self {
-        match value {
-            0 => ObjectPublicity::Private,
-            1 => ObjectPublicity::Friends,
-            2 => ObjectPublicity::Unlisted,
-            3 => ObjectPublicity::Public,
-            _ => ObjectPublicity::Private,
-        }
-    }
+    Private,
+    Friends,
+    Unlisted,
+    Public,
 }
 
 #[derive(
@@ -131,10 +60,10 @@ pub struct Object {
     pub object_size: i64,
     pub image_size: i64,
     pub creator: Uuid,
-    pub object_type: i16,
+    pub object_type: String,
     pub likes: i32,
     pub dislikes: i32,
-    pub publicity: i16,
+    pub publicity: String,
     pub license: Uuid,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
@@ -153,7 +82,7 @@ pub struct User {
     pub password: Vec<u8>,
     #[serde(skip_serializing)]
     pub salt: Vec<u8>,
-    pub permissions_level: i16,
+    pub permissions_level: String,
     pub trust: i32,
     pub homeworld: Option<Uuid>,
     pub avatar: Option<Uuid>,
@@ -163,9 +92,9 @@ pub struct User {
     pub can_login: bool,
     pub upload_quota_used: i64,
     pub download_quota_used: i64,
-    pub status: i16,
+    pub status: String,
     pub profile_dark_mode: bool,
-    pub profile_style: i16,
+    pub profile_style: String,
 }
 
 #[derive(Queryable, Selectable, Insertable, Serialize)]
@@ -241,7 +170,7 @@ pub struct Instance {
     pub world: Uuid,
     pub name: String,
     pub max_players: i16,
-    pub publicity: i16,
+    pub publicity: String,
     pub anyone_can_invite: bool,
     pub is_gameserver: bool,
     pub ip: ipnet::IpNet,
@@ -274,7 +203,7 @@ pub struct Moderation {
     pub id: Uuid,
     pub target: Uuid,
     pub moderator: Option<Uuid>,
-    pub type_: i16,
+    pub type_: String,
     pub expires: Option<DateTime<Utc>>,
     pub details: Option<String>,
 }

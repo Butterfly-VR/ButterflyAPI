@@ -36,7 +36,7 @@ pub struct InstanceCreation {
     world: Uuid,
     name: String,
     max_players: i16,
-    publicity: i16,
+    publicity: String,
     anyone_can_invite: bool,
     is_gameserver: bool,
 }
@@ -110,7 +110,7 @@ pub struct InstanceInfo {
     pub name: String,
     pub max_players: i16,
     pub current_players: i16,
-    pub publicity: i16,
+    pub publicity: String,
     pub anyone_can_invite: bool,
     pub is_gameserver: bool,
     pub ip: String,
@@ -157,7 +157,7 @@ pub async fn search_instances(
                 .filter(instances::world.eq(search.world))
                 .filter(
                     instances::publicity
-                        .eq(InstancePublicity::Public as i16)
+                        .eq(InstancePublicity::Public.as_ref())
                         .or(users::id
                             .eq(user)
                             .and(users::instance.eq(instances::id.nullable()))),
@@ -250,7 +250,7 @@ pub async fn join_instance(
             .filter(instances::id.eq(id))
             // todo: check other publicity types once friends / invites are implemented
             // would also need to track instance creator
-            .filter(instances::publicity.eq(InstancePublicity::Public as i16))
+            .filter(instances::publicity.eq(InstancePublicity::Public.as_ref()))
             .first(&mut conn)
             .await
             .optional()?

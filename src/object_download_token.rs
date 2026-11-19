@@ -33,7 +33,7 @@ pub struct ObjectInfo {
     pub name: String,
     pub verified: bool,
     pub creator: String,
-    pub object_type: i16,
+    pub object_type: String,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
 }
@@ -107,7 +107,7 @@ pub async fn get_object_from_token(
         ));
     };
 
-    let object_type = ObjectType::try_from(object.object_type)
+    let object_type = ObjectType::try_from(object.object_type.as_str())
         .map_err(|_| ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let enum_str: &'static str = object_type.into();
@@ -163,6 +163,7 @@ pub async fn change_object_server_variant_file(
 
     let enum_str: &'static str = match object
         .object_type
+        .as_str()
         .try_into()
         .map_err(|_| ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?
     {

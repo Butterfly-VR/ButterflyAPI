@@ -29,6 +29,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
+use strum_macros::AsRefStr;
+use strum_macros::EnumString;
+use strum_macros::IntoStaticStr;
 use tower::ServiceBuilder;
 use uuid::Uuid;
 
@@ -206,7 +209,7 @@ pub async fn moderate_object(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone, Copy, EnumString, AsRefStr, IntoStaticStr)]
 pub enum UserModerationType {
     Warn,
     Ban,
@@ -234,7 +237,7 @@ pub async fn moderate_user(
                     id: Uuid::new_v4(),
                     target: request.target,
                     moderator: Some(user_id),
-                    type_: request.moderation_type as i16,
+                    type_: request.moderation_type.as_ref().to_string(),
                     expires: None,
                     details: request.reason,
                 })
@@ -247,7 +250,7 @@ pub async fn moderate_user(
                     id: Uuid::new_v4(),
                     target: request.target,
                     moderator: Some(user_id),
-                    type_: request.moderation_type as i16,
+                    type_: request.moderation_type.as_ref().to_string(),
                     expires: request
                         .expiry_utc
                         .and_then(|x| DateTime::from_timestamp_secs(x as i64)),

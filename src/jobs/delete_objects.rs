@@ -14,15 +14,15 @@ pub async fn run_delete_objects(
     const OBJECT_IMAGE_SUFFIX: &str = "-images";
     const SERVER_VARIANT_SUFFIX: &str = "-server";
 
-    let object_list: Vec<(i16, Uuid)> = delete(objects::table)
+    let object_list: Vec<(String, Uuid)> = delete(objects::table)
         .filter(objects::delete_at.le(diesel::dsl::now))
         .returning((objects::object_type, objects::id))
-        .get_results::<(i16, Uuid)>(conn)
+        .get_results::<(String, Uuid)>(conn)
         .await
         .unwrap();
 
-    for (object_type, id) in object_list.iter().copied() {
-        let object_type: ObjectType = object_type.try_into().unwrap();
+    for (object_type, id) in object_list.into_iter() {
+        let object_type: ObjectType = object_type.as_str().try_into().unwrap();
 
         let bucket: &str = object_type.into();
         let key = id;

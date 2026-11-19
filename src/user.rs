@@ -99,7 +99,7 @@ pub async fn set_homeworld(
     let homeworld = objects::table
         .select(objects::id)
         .filter(objects::id.eq(homeworld.uuid))
-        .filter(objects::object_type.eq(ObjectType::World as i16))
+        .filter(objects::object_type.eq(ObjectType::World.as_ref()))
         .first::<Uuid>(&mut conn)
         .await?;
 
@@ -121,7 +121,7 @@ pub async fn set_avatar(
     let avatar = objects::table
         .select(objects::id)
         .filter(objects::id.eq(avatar.uuid))
-        .filter(objects::object_type.eq(ObjectType::Avatar as i16))
+        .filter(objects::object_type.eq(ObjectType::Avatar.as_ref()))
         .first::<Uuid>(&mut conn)
         .await?;
 

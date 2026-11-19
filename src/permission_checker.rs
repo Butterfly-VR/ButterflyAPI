@@ -29,9 +29,10 @@ pub async fn check_permissions(
         &users::table
             .select(users::permissions_level)
             .filter(users::id.eq(user))
-            .first::<i16>(&mut conn)
+            .first::<String>(&mut conn)
             .await?
-            .into(),
+            .as_str()
+            .try_into()?,
     ) {
         trace!(
             "authenticated user {:?} for access to {:?} with one of permissions levels: {:?}",

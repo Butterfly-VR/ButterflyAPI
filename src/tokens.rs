@@ -163,7 +163,7 @@ pub async fn sign_in(
                 // end of 'critical' section (see top of function)
                 // if this code block isnt reached, critical section lasts until the end of the function
 
-                if let Some(x) = moderations.into_iter().find(|x| x.type_ == moderation::UserModerationType::Ban as i16) {
+                if let Some(x) = moderations.into_iter().find(|x| x.type_ == moderation::UserModerationType::Ban.as_ref()) {
                     let expire_string = match x.expires {
                         Some(expires) => format!("(expires: {})", expires.date_naive().to_string()),
                         None => "".to_string(),
@@ -244,7 +244,7 @@ pub async fn renew(
 
     if let Some(x) = moderations
         .into_iter()
-        .find(|x| x.type_ == moderation::UserModerationType::Ban as i16)
+        .find(|x| x.type_ == moderation::UserModerationType::Ban.as_ref())
     {
         let expire_string = match x.expires {
             Some(expires) => format!(" (expires: {:#?})", expires),

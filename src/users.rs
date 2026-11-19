@@ -8,6 +8,7 @@ use crate::email::check_email;
 use crate::email::send_email;
 use crate::hash::hash_password;
 use crate::models::IpInfo;
+use crate::models::PermissionsLevel;
 use crate::models::{PublicUserInfo, UnverifiedUser, User};
 use crate::schema::ip_infos;
 use crate::schema::unverified_users;
@@ -270,7 +271,7 @@ pub async fn verify_email(
                     password: user.password,
                     salt: user.salt,
                     email: user.email,
-                    permissions_level: 0,
+                    permissions_level: PermissionsLevel::Default.as_ref().to_string(),
                     trust: 0,
                     homeworld: None,
                     avatar: None,
@@ -280,9 +281,9 @@ pub async fn verify_email(
                     can_login: true,
                     upload_quota_used: 0,
                     download_quota_used: 0,
-                    status: 0,
+                    status: "Online".to_string(),
                     profile_dark_mode: false,
-                    profile_style: 0,
+                    profile_style: "Default".to_string(),
                 };
                 insert_into(users::table)
                     .values(new_user)

@@ -18,6 +18,9 @@ use diesel_async::RunQueryDsl;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use strum_macros::AsRefStr;
+use strum_macros::EnumString;
+use strum_macros::IntoStaticStr;
 use uuid::Uuid;
 
 const SEARCH_ROUTE: &str = "/search/{query}";
@@ -44,7 +47,7 @@ pub struct SearchResult {
     pub avatars: Option<Vec<ShortObject>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy, EnumString, AsRefStr, IntoStaticStr)]
 pub enum FilterObjectTypes {
     World = 0,
     Avatar = 1,
@@ -172,11 +175,11 @@ pub async fn search_objects(
                 .or(tags::tag.eq(search_term))
                 .or(users::username.like(format!("%{search_term}%"))),
         )
-        .filter(objects::object_type.eq(object_type as i16))
+        .filter(objects::object_type.eq(object_type.as_ref()))
         .filter(
             objects::publicity
-                .eq(ObjectPublicity::Public as i16)
-                .or(users::id.eq(user)),
+                .eq(ObjectPublicity::Public.as_ref())
+                .or(objects::creator.eq(user)),
         )
         .filter(objects::verified.eq(true).or(objects::creator.eq(user)))
         .filter(objects::delete_at.is_null())

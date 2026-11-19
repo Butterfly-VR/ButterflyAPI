@@ -54,7 +54,7 @@ pub struct ObjectUpload {
     description: String,
     tags: Vec<String>,
     flags: Vec<bool>,
-    publicity: i16,
+    publicity: String,
     license: String,
     encryption_key: Vec<u8>,
     encryption_iv: Vec<u8>,
@@ -103,7 +103,7 @@ pub async fn create_or_update_object(
             if let Some(object) = objects::table
                 .select(Object::as_select())
                 .filter(objects::id.eq(&object_id))
-                .filter(objects::object_type.eq(object_type as i16))
+                .filter(objects::object_type.eq(object_type.as_ref()))
                 .first(&mut conn)
                 .await
                 .optional()?
@@ -243,7 +243,7 @@ pub async fn create_or_update_object(
                     object_size: 0,
                     image_size: 0,
                     creator: user_id,
-                    object_type: object_type as i16,
+                    object_type: object_type.as_ref().to_string(),
                     likes: 0,
                     dislikes: 0,
                     publicity: json.publicity,
@@ -283,8 +283,8 @@ pub struct ObjectInfo {
     pub object_size: i64,
     pub image_size: i64,
     pub creator: Uuid,
-    pub object_type: i16,
-    pub publicity: i16,
+    pub object_type: String,
+    pub publicity: String,
     pub license: String,
     pub encryption_key: Vec<u8>,
     pub encryption_iv: Vec<u8>,
@@ -302,7 +302,7 @@ pub async fn get_object_info(
         .inner_join(licenses::table)
         .select((Object::as_select(), licenses::text))
         .filter(objects::id.eq(&object_id))
-        .filter(objects::object_type.eq(object_type as i16))
+        .filter(objects::object_type.eq(object_type.as_ref()))
         .filter(objects::delete_at.is_null())
         .filter(objects::verified.eq(true).or(objects::creator.eq(user)))
         .first::<(Object, String)>(&mut conn)
@@ -399,10 +399,10 @@ pub async fn change_object_file(
     if let Some(object) = objects::table
         .select(Object::as_select())
         .filter(objects::id.eq(&object_id))
-        .filter(objects::object_type.eq(object_type as i16))
+        .filter(objects::object_type.eq(object_type.as_ref()))
         .first(&mut conn)
         .await
-        .optional()?
+        .optional()? as Option<Object>
     {
         if object.creator != user_id {
             return Err(ApiError::WithResponse(
@@ -427,7 +427,7 @@ pub async fn change_object_file(
 
         diesel::update(objects::table)
             .filter(objects::id.eq(&object_id))
-            .filter(objects::object_type.eq(object_type as i16))
+            .filter(objects::object_type.eq(object_type.as_ref()))
             .set((
                 objects::verified.eq(false),
                 objects::updated_at.eq(Utc::now()),
@@ -442,7 +442,7 @@ pub async fn change_object_file(
                     .sql(" AS BIGINT)"),
             )
             .filter(objects::creator.eq(user_id))
-            .filter(objects::publicity.ne(ObjectPublicity::Public as i16))
+            .filter(objects::publicity.ne(ObjectPublicity::Public.as_ref()))
             .get_result::<i64>(&mut conn)
             .await
             .unwrap_or(0);
@@ -453,7 +453,7 @@ pub async fn change_object_file(
                     .sql(" AS BIGINT)"),
             )
             .filter(objects::creator.eq(user_id))
-            .filter(objects::publicity.ne(ObjectPublicity::Public as i16))
+            .filter(objects::publicity.ne(ObjectPublicity::Public.as_ref()))
             .get_result::<i64>(&mut conn)
             .await
             .unwrap_or(0);
@@ -472,7 +472,7 @@ pub async fn change_object_file(
 
         diesel::update(objects::table)
             .filter(objects::id.eq(&object_id))
-            .filter(objects::object_type.eq(object_type as i16))
+            .filter(objects::object_type.eq(object_type.as_ref()))
             .set(
                 objects::object_size.eq(state
                     .s3_client
@@ -491,6 +491,7 @@ pub async fn change_object_file(
 
         let enum_str: &'static str = match object
             .object_type
+            .as_str()
             .try_into()
             .map_err(|_| ApiError::WithCode(StatusCode::INTERNAL_SERVER_ERROR))?
         {
@@ -625,7 +626,7 @@ pub async fn change_object_image(
     if let Some(object) = objects::table
         .select(Object::as_select())
         .filter(objects::id.eq(&object_id))
-        .filter(objects::object_type.eq(object_type as i16))
+        .filter(objects::object_type.eq(object_type.as_ref()))
         .first(&mut conn)
         .await
         .optional()?
@@ -653,7 +654,7 @@ pub async fn change_object_image(
 
         diesel::update(objects::table)
             .filter(objects::id.eq(&object_id))
-            .filter(objects::object_type.eq(object_type as i16))
+            .filter(objects::object_type.eq(object_type.as_ref()))
             .set((
                 objects::verified.eq(false),
                 objects::updated_at.eq(Utc::now()),
@@ -668,7 +669,7 @@ pub async fn change_object_image(
                     .sql(" AS BIGINT)"),
             )
             .filter(objects::creator.eq(user_id))
-            .filter(objects::publicity.ne(ObjectPublicity::Public as i16))
+            .filter(objects::publicity.ne(ObjectPublicity::Public.as_ref()))
             .get_result::<i64>(&mut conn)
             .await
             .unwrap_or(0);
@@ -679,7 +680,7 @@ pub async fn change_object_image(
                     .sql(" AS BIGINT)"),
             )
             .filter(objects::creator.eq(user_id))
-            .filter(objects::publicity.ne(ObjectPublicity::Public as i16))
+            .filter(objects::publicity.ne(ObjectPublicity::Public.as_ref()))
             .get_result::<i64>(&mut conn)
             .await
             .unwrap_or(0);
@@ -698,7 +699,7 @@ pub async fn change_object_image(
 
         diesel::update(objects::table)
             .filter(objects::id.eq(&object_id))
-            .filter(objects::object_type.eq(object_type as i16))
+            .filter(objects::object_type.eq(object_type.as_ref()))
             .set(
                 objects::image_size.eq(state
                     .s3_client
@@ -922,7 +923,7 @@ pub async fn delete_object(
     if let Some(object) = objects::table
         .select(Object::as_select())
         .filter(objects::id.eq(&object_id))
-        .filter(objects::object_type.eq(object_type as i16))
+        .filter(objects::object_type.eq(object_type.as_ref()))
         .filter(objects::delete_at.is_null())
         .first(&mut conn)
         .await

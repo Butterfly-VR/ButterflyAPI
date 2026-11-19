@@ -45,3 +45,5 @@ ipnet = "2.12.2"
 moka = { version = "0.12.16", features = ["future"] }
 time = "0.3.55"
 chrono = { version = "0.4.45", features = ["serde"]}
+strum = "0.28.0"
+strum_macros = "0.28.0"
