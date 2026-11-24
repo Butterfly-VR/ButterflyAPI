@@ -50,6 +50,7 @@ const COFFEE_ORIGIN: &str = "/api/v0/make_me_a_coffee";
 const COFFEE_ORIGIN2: &str = "/api/v0/sudo_make_me_a_coffee";
 const HEALTH_CHECK_ORIGIN: &str = "/api/v0/health";
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(30);
+const MAX_CONNECTIONS: u32 = 10;
 
 // combined should be < deployment cache volume size
 const OBJECT_CACHE_SIZE_KB: u64 = 1024 * 1024 * 8;
@@ -153,6 +154,7 @@ async fn main() {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let pool = Pool::builder()
+        .max_size(MAX_CONNECTIONS)
         .connection_timeout(Duration::from_secs(3))
         .min_idle(1)
         .queue_strategy(QueueStrategy::Lifo)
