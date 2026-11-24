@@ -165,8 +165,11 @@ pub async fn create_or_update_object(
                         .await?;
                 }
 
+                let null_value: Option<DateTime<Utc>> = None;
+
                 diesel::update(&object)
-                    .set(new_object)
+                    // if users deletes and then uploads to same id, we need to clear delete at
+                    .set((new_object, objects::delete_at.eq(null_value)))
                     .execute(&mut conn)
                     .await?;
             } else {
@@ -350,7 +353,10 @@ pub async fn get_object_file(
     State(state): State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
-    let enum_str: &'static str = object_type.into();
+    let enum_str: &'static str = match object_type {
+        models::ObjectType::World => "worlds",
+        models::ObjectType::Avatar => "avatars",
+    };
     if let Some(cache_entry) = state.object_cache.get(&object_id).await {
         let mut conn = state.pool.get().await?;
 
@@ -380,7 +386,7 @@ pub async fn get_object_file(
     let object = state
         .s3_client
         .get_object()
-        .bucket(enum_str.to_owned())
+        .bucket(enum_str.to_owned().to_lowercase())
         .key(object_id.to_string())
         .send()
         .await?;
@@ -421,8 +427,8 @@ pub async fn change_object_file(
         let stream = body.into_data_stream();
 
         let enum_str: &'static str = match object_type {
-            ObjectType::World => "worlds",
-            ObjectType::Avatar => "avatars",
+            models::ObjectType::World => "worlds",
+            models::ObjectType::Avatar => "avatars",
         };
 
         diesel::update(objects::table)
@@ -477,7 +483,7 @@ pub async fn change_object_file(
                 objects::object_size.eq(state
                     .s3_client
                     .head_object()
-                    .bucket(enum_str)
+                    .bucket(enum_str.to_lowercase())
                     .key(object_id.to_string())
                     .send()
                     .await?
@@ -503,7 +509,7 @@ pub async fn change_object_file(
         state
             .s3_client
             .delete_object()
-            .bucket(&enum_str)
+            .bucket(&enum_str.to_lowercase())
             .key(object_id)
             .send()
             .await
@@ -525,7 +531,10 @@ pub async fn get_object_server_variant_file(
     State(state): State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
-    let enum_str: &'static str = object_type.into();
+    let enum_str: &'static str = match object_type {
+        models::ObjectType::World => "worlds",
+        models::ObjectType::Avatar => "avatars",
+    };
     let enum_str = enum_str.to_owned() + "-server";
 
     if let Some(cache_entry) = state.server_variant_cache.get(&object_id).await {
@@ -562,7 +571,7 @@ pub async fn get_object_server_variant_file(
     let object = state
         .s3_client
         .get_object()
-        .bucket(enum_str)
+        .bucket(enum_str.to_lowercase())
         .key(object_id.to_string())
         .send()
         .await?;
@@ -574,7 +583,10 @@ pub async fn get_object_image(
     State(state): State<Arc<AppState>>,
     Path((object_type, object_id)): Path<(models::ObjectType, Uuid)>,
 ) -> Result<Body, ApiError> {
-    let enum_str: &'static str = object_type.into();
+    let enum_str: &'static str = match object_type {
+        models::ObjectType::World => "worlds",
+        models::ObjectType::Avatar => "avatars",
+    };
     let enum_str = enum_str.to_owned() + "-images";
 
     if let Some(cache_entry) = state.image_cache.get(&object_id).await {
@@ -607,7 +619,7 @@ pub async fn get_object_image(
     let object = state
         .s3_client
         .get_object()
-        .bucket(enum_str)
+        .bucket(enum_str.to_lowercase())
         .key(object_id.to_string())
         .send()
         .await?;
@@ -704,7 +716,7 @@ pub async fn change_object_image(
                 objects::image_size.eq(state
                     .s3_client
                     .head_object()
-                    .bucket(&(enum_str.to_owned() + "-images"))
+                    .bucket(&(enum_str.to_owned().to_lowercase() + "-images"))
                     .key(object_id.to_string())
                     .send()
                     .await?

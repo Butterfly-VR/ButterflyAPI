@@ -49,9 +49,9 @@ pub struct SearchResult {
 
 #[derive(PartialEq, Debug, Clone, Copy, EnumString, AsRefStr, IntoStaticStr)]
 pub enum FilterObjectTypes {
-    World = 0,
-    Avatar = 1,
-    User = 2,
+    World,
+    Avatar,
+    User,
 }
 
 #[derive(Debug, Clone, Copy)]
